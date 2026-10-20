@@ -1,0 +1,4 @@
+[tools]
+powershell = "7"
+python = "3.12"
+uv = "latest"
