@@ -21,10 +21,10 @@ Use **Segment → Detect segments…** (or the button in the Segments panel) to
 split the video at scene changes. Adjust the scene threshold (lower detects more
 cuts), minimum segment length, frame step, and decoder threads in the dialog. These preferences are saved in
 QSettings and restored when the dialog is reopened, including after restarting
-the app. Detection replaces existing segments and copies the current crop
+the app. Detection asks before clearing existing segments and copies the current crop
 settings into each new segment.
 The progress display reports video time scanned and cuts found. **Cancel detection**
-stops the scan and retains the existing segments. FFmpeg diagnostics appear in
+stops the scan; segments cleared by a confirmed replacement remain cleared. FFmpeg diagnostics appear in
 the Process log.
 
 Application preferences use QSettings in `settings.ini` under platformdirs' user
@@ -32,8 +32,14 @@ config directory (`%LOCALAPPDATA%\FastVideoCropper` on Windows). Detection optio
 mute, preview and zoom preferences, encoder/device, completion actions and delays,
 folder, window geometry, panel sizes, and selected tab are restored on startup.
 Window geometry, dock layout, and splitter sizes use the `mainWindow` settings group.
-Crop geometry, rotation, preset, and aspect lock belong to each video's segments
+Crop geometry, pixel padding, rotation, preset, and aspect lock belong to each video's segments
 and are retained only during the session.
+
+**Padding X/Y** adjusts both sides of each axis in whole source pixels: positive
+values expand the crop, negative values inset it. Expansion stops at source edges.
+The dashed outline and shaded mask show the output crop; the original frame remains
+editable. Padding is saved independently per segment, inherited on split, and swaps
+axes with rotation. Insets must leave a positive crop width and height.
 
 The **Segments** panel docks on the right by default. Drag its title bar to move
 it to another dock area or float it in a separate window. **View → Segments**

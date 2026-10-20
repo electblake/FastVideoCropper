@@ -42,20 +42,25 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QMainWindow,
+    QMessageBox,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSlider,
     QSpinBox,
     QSplitter,
+    QStyle,
     QTabWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from . import APP_NAME, APP_VERSION, integrations
-from .encoding import Export, rotate_rect
+from .crops import CropScan
+from .encoding import Export, padded_rect, rotate_rect
 from .segments import SceneScan, Segment
 from .updates import RELEASES_URL, UpdateDialog
 
@@ -119,6 +124,7 @@ class Application(QObject):
         self.active_segment = -1
         self.restoring_segment = False
         self.detecting = False
+        self.detecting_crop = False
         self.segment_regions = []
         self.export_jobs = []
         self.export_index = 0
@@ -209,6 +215,10 @@ class Application(QObject):
         self.clear_segments_action = segment_menu.addAction(
             "&Clear segments", self.clear_segments
         )
+        crop_menu = self.window.menuBar().addMenu("&Crop")
+        self.detect_crop_action = crop_menu.addAction(
+            "&Detect crop borders…", self.show_crop_detection
+        )
         view_menu = self.window.menuBar().addMenu("&View")
         help_menu = self.window.menuBar().addMenu("&Help")
         self.check_update_action = help_menu.addAction(
@@ -270,6 +280,9 @@ class Application(QObject):
         left_layout = QVBoxLayout(left)
         self.crop_summary = QLabel("No segment selected")
         self.crop_summary.setWordWrap(True)
+        self.crop_summary.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum
+        )
         left_layout.addWidget(self.crop_summary)
         self.graphics = pg.GraphicsLayoutWidget()
         self.graphics.setBackground(self.window.palette().window().color())
@@ -296,6 +309,14 @@ class Application(QObject):
         self.roi.setZValue(2)
         self.roi.setPen(pg.mkPen("#ffd166", width=2))
         self.view.addItem(self.roi)
+        self.padding_outline = QGraphicsRectItem()
+        pen = QPen(self.window.palette().text().color(), 2, Qt.PenStyle.DashLine)
+        pen.setCosmetic(True)
+        self.padding_outline.setPen(pen)
+        self.padding_outline.setZValue(3)
+        self.padding_outline.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        self.padding_outline.hide()
+        self.view.addItem(self.padding_outline)
         self.roi.sigRegionChanged.connect(self.geometry_changed)
         self.roi.sigRegionChangeFinished.connect(self.geometry_finished)
         self.masks = []
@@ -326,6 +347,56 @@ class Application(QObject):
         playback.addWidget(self.range_graph)
         buttons = QHBoxLayout()
         self.play = self.button("Play", self.toggle_play, buttons)
+        self.navigation_buttons = {}
+        for name, text, icon, slot in [
+            (
+                "start",
+                "Jump to start",
+                QStyle.StandardPixmap.SP_MediaSkipBackward,
+                lambda: self.seek_segment(0),
+            ),
+            (
+                "previous",
+                "Previous segment",
+                QStyle.StandardPixmap.SP_MediaSeekBackward,
+                lambda: self.jump_segment(-1),
+            ),
+            (
+                "back",
+                "−1 s",
+                None,
+                lambda: self.seek_segment(max(0, self.player.position() - 1000)),
+            ),
+            (
+                "forward",
+                "+1 s",
+                None,
+                lambda: self.seek_segment(
+                    min(self.player.duration(), self.player.position() + 1000)
+                ),
+            ),
+            (
+                "next",
+                "Next segment",
+                QStyle.StandardPixmap.SP_MediaSeekForward,
+                lambda: self.jump_segment(1),
+            ),
+            (
+                "end",
+                "Jump to end",
+                QStyle.StandardPixmap.SP_MediaSkipForward,
+                lambda: self.seek_segment(self.player.duration()),
+            ),
+        ]:
+            button = QToolButton()
+            button.setText(text)
+            button.setAccessibleName(text)
+            button.setToolTip(text)
+            if icon is not None:
+                button.setIcon(self.window.style().standardIcon(icon))
+            button.clicked.connect(slot)
+            buttons.addWidget(button)
+            self.navigation_buttons[name] = button
         self.mute = QCheckBox("Mute")
         self.mute.setChecked(self.settings.value("mute", False, bool))
         self.audio.setMuted(self.mute.isChecked())
@@ -403,6 +474,28 @@ class Application(QObject):
             form.addRow(label, field)
             self.fields.append(field)
             field.valueChanged.connect(self.numeric_geometry)
+        self.padding_fields = []
+        for axis in ("X", "Y"):
+            field = QSpinBox()
+            field.setRange(-100000, 100000)
+            field.setSuffix(" px")
+            field.setKeyboardTracking(False)
+            field.setAccessibleName(f"{axis} padding in source pixels")
+            field.setToolTip(
+                "Positive expands both sides; negative insets both sides. "
+                "Expansion stops at the source edges."
+            )
+            form.addRow(f"Padding {axis}", field)
+            self.padding_fields.append(field)
+            field.valueChanged.connect(self.geometry_changed)
+            field.valueChanged.connect(self.geometry_finished)
+        padding_help = QLabel(
+            "Per side: + expands, − insets.\n"
+            "Dashed outline = output crop.\n"
+            "Expansion stops at source edges."
+        )
+        padding_help.setWordWrap(True)
+        form.addRow(padding_help)
         rotation = QVBoxLayout()
         self.button("Rotate left", lambda: self.rotate(3), rotation)
         self.button("Rotate right", lambda: self.rotate(1), rotation)
@@ -426,10 +519,27 @@ class Application(QObject):
         form.addRow(presets)
         self.preset_status = QLabel("Aspect ratio: Custom")
         form.addRow(self.preset_status)
+        for divisions, positions in [
+            (3, ["Left", "Center", "Right"]),
+            (2, ["Left", "Right"]),
+        ]:
+            row = QHBoxLayout()
+            for index, position in enumerate(positions):
+                self.button(
+                    f"1/{divisions} {position}",
+                    lambda checked=False, divisions=divisions, index=index: (
+                        self.crop_slice(divisions, index)
+                    ),
+                    row,
+                )
+            form.addRow(row)
         center_row = QHBoxLayout()
         self.button("Center frame", self.center, center_row)
         self.button("Full frame", self.full_frame, center_row)
         form.addRow(center_row)
+        self.detect_crop_button = QPushButton("Detect crop borders…")
+        self.detect_crop_button.clicked.connect(self.show_crop_detection)
+        form.addRow(self.detect_crop_button)
         self.zoom = self.preference("Zoom into frame", "zoom", False, form)
         self.zoom.toggled.connect(self.fit)
         fit_row = QHBoxLayout()
@@ -631,8 +741,169 @@ class Application(QObject):
             )
         dialog.deleteLater()
 
+    def show_crop_detection(self):
+        self.count_cancelled()
+        dialog = QDialog(self.window)
+        dialog.setWindowTitle("Detect crop borders")
+        layout = QVBoxLayout(dialog)
+        description = QLabel(
+            "Scan the selected segment and apply the detected crop frame. "
+            "With reset count 0, detection keeps the largest video area found. "
+            "Otherwise, the final detection window is used."
+        )
+        description.setWordWrap(True)
+        layout.addWidget(description)
+        form = QFormLayout()
+        mode = QComboBox()
+        mode.addItem("Black borders", "black")
+        mode.addItem("Motion and edges", "mvedges")
+        mode.setCurrentIndex(
+            mode.findData(self.settings.value("cropdetect_mode", "black"))
+        )
+        mode.currentIndexChanged.connect(
+            lambda _: self.settings.setValue("cropdetect_mode", mode.currentData())
+        )
+        form.addRow("&Mode", mode)
+        fields = {}
+        for name, label, maximum, default, hint in [
+            (
+                "limit",
+                "Black &threshold",
+                65535,
+                24 / 255,
+                "Pixels below this level are black. Values 0–1 scale with bit depth; higher values are absolute.",
+            ),
+            (
+                "round",
+                "Dimension &multiple",
+                2147483647,
+                16,
+                "Round width and height to this multiple. Use 2 for even dimensions.",
+            ),
+            (
+                "skip",
+                "&Skip initial frames",
+                2147483647,
+                2,
+                "Number of frames to ignore at the start of the segment.",
+            ),
+            (
+                "reset_count",
+                "&Reset count (frames)",
+                2147483647,
+                0,
+                "0 keeps the largest area across the segment. Otherwise restart after this many frames.",
+            ),
+            (
+                "max_outliers",
+                "Maximum &outliers",
+                2147483647,
+                0,
+                "Number of non-black pixels tolerated when scanning a border line.",
+            ),
+            (
+                "mv_threshold",
+                "Motion threshold (&pixels)",
+                100,
+                8,
+                "Minimum motion used to locate the video area.",
+            ),
+            (
+                "low",
+                "&Low edge threshold",
+                1,
+                15 / 255,
+                "Weak-edge threshold, from 0 to 1. Use a value no higher than the high threshold.",
+            ),
+            (
+                "high",
+                "&High edge threshold",
+                1,
+                25 / 255,
+                "Strong-edge threshold, from 0 to 1.",
+            ),
+        ]:
+            field = QDoubleSpinBox() if isinstance(default, float) else QSpinBox()
+            field.setObjectName(name)
+            field.setRange(0, maximum)
+            if isinstance(default, float):
+                field.setDecimals(6)
+                field.setSingleStep(0.01)
+            field.setValue(
+                self.settings.value(f"cropdetect_{name}", default, type(default))
+            )
+            field.setToolTip(hint)
+            field.valueChanged.connect(
+                lambda value, key=name: self.settings.setValue(
+                    f"cropdetect_{key}", value
+                )
+            )
+            form.addRow(label, field)
+            fields[name] = field
+        for name in ("limit", "max_outliers", "mv_threshold", "low", "high"):
+            black = name in ("limit", "max_outliers")
+            fields[name].setEnabled((mode.currentData() == "black") == black)
+            mode.currentIndexChanged.connect(
+                lambda _, field=fields[name], black=black: field.setEnabled(
+                    (mode.currentData() == "black") == black
+                )
+            )
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText(
+            "Detect and apply crop"
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.detect_crop(
+                {
+                    "mode": mode.currentData(),
+                    **{name: field.value() for name, field in fields.items()},
+                }
+            )
+        dialog.deleteLater()
+
+    def detect_crop(self, options):
+        self.count_cancelled()
+        self.player.pause()
+        self.crop_scan = CropScan(
+            self.paths[self.index], self.segments[self.active_segment], options
+        )
+        self.detecting = True
+        self.detecting_crop = True
+        self.running = True
+        self.outcome = ""
+        self.progress_buffer = ""
+        self.progress_values = {}
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self.progress_text.setText("Detecting crop borders…")
+        self.log.clear()
+        self.log.appendPlainText(
+            subprocess.list2cmdline([self.ffmpeg, *self.crop_scan.arguments()])
+        )
+        self.update_enabled()
+        self.process.start(self.ffmpeg, self.crop_scan.arguments())
+
     def detect_segments(self, threshold, minimum, framestep=1, threads=0):
         self.count_cancelled()
+        if self.segments:
+            answer = QMessageBox.warning(
+                self.window,
+                "Replace existing segments?",
+                "Starting scene detection will clear all existing segments and their "
+                "individual crop settings. New detected segments will be created on "
+                "an empty timeline. Continue?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            self.clear_segments()
         self.player.pause()
         self.detecting = True
         self.running = True
@@ -678,6 +949,7 @@ class Application(QObject):
                 self.turns,
                 self.selected_preset,
                 self.lock.isChecked(),
+                *(field.value() for field in self.padding_fields),
             )
             for start, end in ranges
         ]
@@ -739,7 +1011,8 @@ class Application(QObject):
             f"{index + 1:02d}   {segment.start:.3f} – {segment.end:.3f} s\n"
             f"Duration {segment.end - segment.start:.3f} s\n"
             f"Crop {w * width:.0f} × {h * height:.0f} at {x * width:.0f}, {y * height:.0f}\n"
-            f"{segment.preset} • Rotation {segment.turns * 90}°"
+            f"{segment.preset} • Rotation {segment.turns * 90}°\n"
+            f"Padding X {segment.padding_x:+d} px / Y {segment.padding_y:+d} px per side"
         )
 
     def refresh_segments(self):
@@ -794,6 +1067,9 @@ class Application(QObject):
         segment.turns = self.turns
         segment.preset = self.selected_preset
         segment.locked = self.lock.isChecked()
+        segment.padding_x, segment.padding_y = (
+            field.value() for field in self.padding_fields
+        )
         self.segment_list.item(self.active_segment).setText(
             self.segment_text(self.active_segment)
         )
@@ -810,6 +1086,12 @@ class Application(QObject):
         self.restoring_segment = True
         segment = self.segments[index]
         self.rotate((segment.turns - self.turns) % 4)
+        for field, value in zip(
+            self.padding_fields, (segment.padding_x, segment.padding_y)
+        ):
+            field.blockSignals(True)
+            field.setValue(value)
+            field.blockSignals(False)
         x, y, w, h = segment.rect
         self.set_rect(
             (x * self.width, y * self.height, w * self.width, h * self.height)
@@ -840,13 +1122,27 @@ class Application(QObject):
         state = "Processing" if self.running and not self.detecting else "Selected"
         segment = self.segments[self.active_segment]
         x, y, w, h = segment.rect
+        _, _, output_w, output_h = padded_rect(
+            (
+                x * self.pixel_width,
+                y * self.pixel_height,
+                w * self.pixel_width,
+                h * self.pixel_height,
+            ),
+            segment.padding_x,
+            segment.padding_y,
+            self.pixel_width,
+            self.pixel_height,
+        )
         self.crop_summary.setText(
             f"{state} segment {self.active_segment + 1} of {len(self.segments)} • "
             f"{segment.start:.3f} – {segment.end:.3f} s\n"
             f"Crop {w * self.pixel_width:.0f} × {h * self.pixel_height:.0f} at "
             f"{x * self.pixel_width:.0f}, {y * self.pixel_height:.0f} • "
             f"{segment.preset} • Rotation {segment.turns * 90}° • "
-            f"Aspect {'locked' if segment.locked else 'unlocked'}"
+            f"Aspect {'locked' if segment.locked else 'unlocked'}\n"
+            f"Padding X {segment.padding_x:+d} px / Y {segment.padding_y:+d} px per side • "
+            f"Output {output_w:.0f} × {output_h:.0f}"
         )
 
     def select_timeline_segment(self, event):
@@ -885,6 +1181,10 @@ class Application(QObject):
         self.player.stop()
         self.turns = 0
         self.lock.setChecked(False)
+        for field in self.padding_fields:
+            field.blockSignals(True)
+            field.setValue(0)
+            field.blockSignals(False)
         self.set_preset("Custom")
         self.player.setSource(QUrl())
         self.output = None
@@ -984,6 +1284,19 @@ class Application(QObject):
         )
         self.update_split_enabled()
 
+        self.update_navigation()
+
+    def update_navigation(self):
+        position = self.player.position() / 1000
+        index = sum(segment.start <= position for segment in self.segments) - 1
+        self.navigation_buttons["previous"].setEnabled(index > 0)
+        self.navigation_buttons["next"].setEnabled(index + 1 < len(self.segments))
+
+    def jump_segment(self, direction):
+        position = self.player.position() / 1000
+        index = sum(segment.start <= position for segment in self.segments) - 1
+        self.seek_segment(round(self.segments[index + direction].start * 1000))
+
     def seek_segment(self, position):
         for index, segment in enumerate(self.segments):
             if segment.start <= position / 1000 < segment.end or (
@@ -1034,6 +1347,16 @@ class Application(QObject):
             field.blockSignals(True)
             field.setValue(value)
             field.blockSignals(False)
+        px, py = (field.value() for field in self.padding_fields)
+        x, y, w, h = padded_rect(
+            (x, y, w, h),
+            px * self.width / self.pixel_width,
+            py * self.height / self.pixel_height,
+            self.width,
+            self.height,
+        )
+        self.padding_outline.setRect(x, y, w, h)
+        self.padding_outline.setVisible(bool(px or py))
         for mask, rect in zip(
             self.masks,
             [
@@ -1045,6 +1368,7 @@ class Application(QObject):
         ):
             mask.setRect(*rect)
         if self.ready:
+            x, y, w, h = self.rect()
             selected = self.selected_preset
             if selected != "Custom":
                 ratio = (
@@ -1144,12 +1468,23 @@ class Application(QObject):
         self.set_rect((0, 0, self.width, self.height))
         self.fit()
 
+    def crop_slice(self, divisions, index):
+        width = self.width / divisions
+        self.set_preset("Custom")
+        self.set_rect((index * width, 0, width, self.height))
+        self.fit()
+
     def rotate(self, steps):
         preset = self.selected_preset
         for _ in range(steps):
             rect = rotate_rect(self.rect(), self.width, self.height)
             self.width, self.height = self.height, self.width
             self.pixel_width, self.pixel_height = self.pixel_height, self.pixel_width
+            px, py = (field.value() for field in self.padding_fields)
+            for field, value in zip(self.padding_fields, (py, px)):
+                field.blockSignals(True)
+                field.setValue(value)
+                field.blockSignals(False)
             self.turns = (self.turns + 1) % 4
             self.roi.maxBounds = QRectF(0, 0, self.width, self.height)
             self.set_rect(rect)
@@ -1175,7 +1510,12 @@ class Application(QObject):
     def fit(self):
         rect = QRectF(0, 0, self.width, self.height)
         if self.zoom.isChecked():
-            rect = QRectF(*self.rect()).adjusted(-50, -50, 50, 50).intersected(rect)
+            rect = (
+                QRectF(*self.rect())
+                .united(self.padding_outline.rect())
+                .adjusted(-50, -50, 50, 50)
+                .intersected(rect)
+            )
         self.view.setRange(rect, padding=0)
 
     def export(self):
@@ -1224,7 +1564,13 @@ class Application(QObject):
             self.export_jobs.append(
                 Export(
                     self.paths[self.index],
-                    (x * width, y * height, w * width, h * height),
+                    padded_rect(
+                        (x * width, y * height, w * width, h * height),
+                        segment.padding_x,
+                        segment.padding_y,
+                        width,
+                        height,
+                    ),
                     segment.turns,
                     segment.start,
                     segment.end,
@@ -1232,6 +1578,7 @@ class Application(QObject):
                     encoder,
                     self.device.value(),
                     index + 1,
+                    exact_crop=bool(segment.padding_x or segment.padding_y),
                 )
             )
         self.export_index = 0
@@ -1280,7 +1627,9 @@ class Application(QObject):
     def read_log(self):
         text = bytes(self.process.readAllStandardError()).decode("utf-8")
         self.log.appendPlainText(text)
-        if self.detecting:
+        if self.detecting_crop:
+            self.crop_scan.read_log(text)
+        elif self.detecting:
             self.scene_scan.read_log(text)
 
     def read_progress(self):
@@ -1298,6 +1647,14 @@ class Application(QObject):
             key, _, value = line.strip().partition("=")
             self.progress_values[key] = value
             if key == "progress" and self.progress_values["out_time_us"] != "N/A":
+                if self.detecting_crop:
+                    duration = self.crop_scan.segment.end - self.crop_scan.segment.start
+                    seconds = float(self.progress_values["out_time_us"]) / 1000000
+                    self.progress.setValue(min(99, int(seconds / duration * 100)))
+                    self.progress_text.setText(
+                        f"Detecting crop borders • {self.progress.value()}%"
+                    )
+                    continue
                 if self.detecting:
                     self.read_log()
                     self.detection_progress(
@@ -1394,13 +1751,19 @@ class Application(QObject):
         self.read_log()
         self.read_progress()
         detecting = self.detecting
+        detecting_crop = self.detecting_crop
+        self.detecting_crop = False
         self.detecting = False
         self.running = False
         self.follow_timer.stop()
         self.pause.setText("Pause")
         if self.outcome == "cancel":
             if detecting:
-                self.progress_text.setText("Scene detection canceled")
+                self.progress_text.setText(
+                    "Crop detection canceled"
+                    if detecting_crop
+                    else "Scene detection canceled"
+                )
             else:
                 self.output.unlink()
                 self.output = None
@@ -1411,6 +1774,22 @@ class Application(QObject):
             )
         elif self.outcome == "stop":
             self.progress_text.setText("Stopped — output saved")
+        elif detecting_crop:
+            x, y, w, h = self.crop_scan.rect()
+            self.set_preset("Custom")
+            self.set_rect(
+                (
+                    x / self.pixel_width * self.width,
+                    y / self.pixel_height * self.height,
+                    w / self.pixel_width * self.width,
+                    h / self.pixel_height * self.height,
+                )
+            )
+            self.fit()
+            self.progress.setValue(100)
+            self.progress_text.setText(
+                "Crop detection complete — selected segment updated"
+            )
         elif detecting:
             self.replace_segments(self.scene_scan.ranges())
         else:
@@ -1473,10 +1852,17 @@ class Application(QObject):
 
     def update_enabled(self):
         self.update_split_enabled()
+        self.update_navigation()
         self.update_crop_summary()
         busy = self.running or self.loading or self.resolving_encoder
         self.detect_action.setEnabled(self.ready and not busy)
         self.detect_button.setEnabled(self.ready and not busy)
+        self.detect_crop_action.setEnabled(
+            self.ready and self.active_segment >= 0 and not busy
+        )
+        self.detect_crop_button.setEnabled(
+            self.ready and self.active_segment >= 0 and not busy
+        )
         self.clear_segments_action.setEnabled(bool(self.segments) and not busy)
         self.clear_segments_button.setEnabled(bool(self.segments) and not busy)
         self.segment_list.setEnabled(self.ready and not busy)

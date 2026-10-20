@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
+    QMessageBox,
     QSpinBox,
 )
 
@@ -27,6 +28,104 @@ def controller(qtbot, tmp_path, monkeypatch):
     controller.window.show()
     yield controller
     controller.window.close()
+
+
+def test_pixel_padding_segments_preview_and_export(controller, qtbot, source, tmp_path):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 1), (1, 2)])
+    c.set_rect((40, 30, 160, 120))
+    c.padding_fields[0].setValue(3)
+    c.padding_fields[1].setValue(-5)
+    assert c.rect() == (40, 30, 160, 120)
+    assert c.padding_outline.rect().getRect() == (37, 35, 166, 110)
+    assert c.padding_outline.isVisible()
+    assert c.masks[0].rect().height() == 35
+    c.rotate(1)
+    assert [field.value() for field in c.padding_fields] == [-5, 3]
+    assert c.padding_outline.rect().getRect() == (95, 37, 110, 166)
+    c.rotate(3)
+    c.segment_list.setCurrentRow(1)
+    assert [field.value() for field in c.padding_fields] == [0, 0]
+    assert not c.padding_outline.isVisible()
+    c.segment_list.setCurrentRow(0)
+    assert [field.value() for field in c.padding_fields] == [3, -5]
+    c.player.setPosition(500)
+    c.split_segment()
+    assert [(s.padding_x, s.padding_y) for s in c.segments] == [
+        (3, -5),
+        (3, -5),
+        (0, 0),
+    ]
+    qtbot.wait(100)
+    c.window.grab().save(str(tmp_path / "padding-preview.png"))
+    c.export_with_encoder("libx265")
+    qtbot.waitUntil(lambda: not c.running, timeout=30000)
+    assert c.export_jobs[0].rect == (37, 35, 166, 110)
+    assert [job.exact_crop for job in c.export_jobs] == [True, True, False]
+    for job, size in zip(c.export_jobs, [(166, 110), (166, 110), (320, 240)]):
+        metadata = json.loads(
+            subprocess.check_output(
+                [
+                    c.ffprobe,
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "v:0",
+                    "-show_entries",
+                    "stream=width,height",
+                    "-of",
+                    "json",
+                    str(job.output),
+                ],
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+        )
+        video = metadata["streams"][0]
+        assert (video["width"], video["height"]) == size
+    c.segment_list.setCurrentRow(0)
+    c.width = 640
+    c.set_rect((80, 30, 320, 120))
+    assert c.padding_outline.rect().getRect() == (74, 35, 332, 110)
+    c.padding_fields[0].setValue(100)
+    c.zoom.setChecked(True)
+    assert c.view.viewRect().contains(c.padding_outline.rect())
+
+
+def test_padding_resets_for_new_video_and_restores_on_return(
+    controller, qtbot, source, tmp_path
+):
+    other = tmp_path / "other.mp4"
+    other.write_bytes(source.read_bytes())
+    c = controller
+    c.paths = [source, other]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 1)])
+    c.padding_fields[0].setValue(-7)
+    c.padding_fields[1].setValue(-3)
+    c.load(1)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 1)])
+    assert [field.value() for field in c.padding_fields] == [0, 0]
+    assert (c.segments[0].padding_x, c.segments[0].padding_y) == (0, 0)
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert [field.value() for field in c.padding_fields] == [-7, -3]
+
+
+def test_padding_edit_refits_zoomed_preview(controller, qtbot, source):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 1)])
+    c.set_rect((140, 100, 40, 40))
+    c.zoom.setChecked(True)
+    c.padding_fields[1].setValue(100)
+    assert c.view.viewRect().contains(c.padding_outline.rect())
 
 
 def test_load_crop_rotate_export(controller, qtbot, source, tmp_path):
@@ -298,6 +397,12 @@ def test_detection_progress_and_cancel(
         start(program, arguments)
 
     monkeypatch.setattr(c.process, "start", realtime)
+
+    def confirm_replacement():
+        dialog = QApplication.activeModalWidget()
+        dialog.button(QMessageBox.StandardButton.Yes).click()
+
+    QTimer.singleShot(20, confirm_replacement)
     c.detect_segments(1, 0, framestep=30, threads=1)
     qtbot.waitUntil(lambda: c.progress.value() > 5, timeout=5000)
     assert c.detecting
@@ -315,7 +420,7 @@ def test_detection_progress_and_cancel(
     qtbot.waitUntil(lambda: not c.running, timeout=3000)
     assert not c.detecting
     assert c.output.read_bytes() == b"previous export"
-    assert [(s.start, s.end) for s in c.segments] == [(0, 3), (3, 6)]
+    assert c.segments == []
     assert c.progress_text.text() == "Scene detection canceled"
 
 
@@ -995,6 +1100,182 @@ def test_split_segment_in_place(controller, qtbot, source, trigger):
         (4.5, 6),
         (6, 8),
     ]
+
+
+def test_player_navigation_controls(controller, qtbot, source):
+    c = controller
+    assert all(not b.isEnabled() for b in c.navigation_buttons.values())
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert not c.navigation_buttons["previous"].isEnabled()
+    assert not c.navigation_buttons["next"].isEnabled()
+    c.replace_segments([(0, 2), (2, 5), (5, 8)])
+    c.segment_list.setCurrentRow(1)
+    c.set_rect((20, 30, 160, 120))
+    c.seek_segment(0)
+    for name, position, segment in [
+        ("next", 2000, 1),
+        ("forward", 3000, 1),
+        ("back", 2000, 1),
+        ("next", 5000, 2),
+        ("previous", 2000, 1),
+        ("previous", 0, 0),
+        ("back", 0, 0),
+        ("end", 8000, 2),
+        ("forward", 8000, 2),
+        ("back", 7000, 2),
+        ("start", 0, 0),
+    ]:
+        qtbot.mouseClick(c.navigation_buttons[name], Qt.MouseButton.LeftButton)
+        assert c.player.position() == position
+        assert c.active_segment == segment
+        assert c.seek.value() == position
+        assert c.time.text() == f"00:00:{position // 1000:02d}"
+        assert c.total_time.text() == "00:00:08"
+        if segment == 1:
+            assert c.rect() == (20, 30, 160, 120)
+    assert not c.navigation_buttons["previous"].isEnabled()
+    c.seek_segment(8000)
+    assert not c.navigation_buttons["next"].isEnabled()
+    c.running = True
+    c.update_enabled()
+    assert all(not b.isEnabled() for b in c.navigation_buttons.values())
+    c.running = False
+    c.update_enabled()
+    c.clear_segments()
+    assert not c.navigation_buttons["previous"].isEnabled()
+    assert not c.navigation_buttons["next"].isEnabled()
+
+
+@pytest.mark.parametrize("trigger,turns,sar", [("menu", 0, 1), ("button", 1, 2)])
+def test_detect_crop_selected_segment(controller, qtbot, tmp_path, trigger, turns, sar):
+    path = tmp_path / "bordered.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=white:s=320x240:r=10:d=4",
+            "-vf",
+            (
+                "drawbox=x=0:y=0:w=iw:h=ih:color=black:t=fill:enable='gte(t,2)',"
+                "drawbox=x=40:y=20:w=240:h=200:color=white:t=fill,"
+                f"setsar={sar}"
+            ),
+            "-c:v",
+            "libx264",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+    c = controller
+    assert not c.detect_crop_action.isEnabled()
+    c.paths = [path]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert not c.detect_crop_action.isEnabled()
+    c.replace_segments([(0, 2), (2, 4)])
+    c.segment_list.setCurrentRow(1)
+    c.rotate(turns)
+    c.lock.setChecked(True)
+    original = c.segments[0].rect
+
+    def accept_detection():
+        dialog = QApplication.activeModalWidget()
+        dialog.findChild(QSpinBox, "round").setValue(2)
+        dialog.grab().save(str(tmp_path / "crop-detection-dialog.png"))
+        dialog.accept()
+
+    QTimer.singleShot(20, accept_detection)
+    if trigger == "menu":
+        c.detect_crop_action.trigger()
+    else:
+        c.detect_crop_button.click()
+    assert c.running and c.detecting_crop
+    assert not c.detect_crop_action.isEnabled()
+    assert not c.segment_list.isEnabled()
+    qtbot.waitUntil(lambda: not c.running, timeout=15000)
+    assert (
+        c.progress_text.text() == "Crop detection complete — selected segment updated"
+    )
+    assert c.rect() == ((40, 20, 240, 200) if turns == 0 else (20, 80, 200, 480))
+    assert c.segments[0].rect == original
+    assert c.active_segment == 1
+    assert c.lock.isChecked()
+    assert c.selected_preset == "Custom"
+    detected = c.rect()
+    c.segment_list.setCurrentRow(0)
+    c.segment_list.setCurrentRow(1)
+    assert c.rect() == detected
+    assert c.detect_crop_action.isEnabled()
+
+
+def test_cancel_crop_detection(controller, qtbot, source, monkeypatch):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 8)])
+    c.set_rect((20, 30, 160, 120))
+    original = c.rect()
+    arguments = app.CropScan.arguments
+    monkeypatch.setattr(
+        app.CropScan, "arguments", lambda self: ["-re", *arguments(self)]
+    )
+    c.detect_crop({"mode": "black", "round": 2})
+    qtbot.waitUntil(lambda: c.process.processId() != 0, timeout=5000)
+    c.cancel_export()
+    qtbot.waitUntil(lambda: not c.running, timeout=15000)
+    assert c.rect() == original
+    assert c.progress_text.text() == "Crop detection canceled"
+    assert c.detect_crop_action.isEnabled()
+
+
+@pytest.mark.parametrize("confirm", [False, True])
+def test_scene_detection_replacement_confirmation(
+    controller, qtbot, scene_video, confirm
+):
+    c = controller
+    c.paths = [scene_video]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready and c.player.duration() == 6000, timeout=15000)
+    c.replace_segments([(0, 1), (1, 6)])
+    c.set_rect((20, 30, 160, 120))
+    originals = list(c.segments)
+
+    def answer_confirmation():
+        dialog = QApplication.activeModalWidget()
+        assert isinstance(dialog, QMessageBox)
+        assert "clear all existing segments" in dialog.text()
+        dialog.button(
+            QMessageBox.StandardButton.Yes
+            if confirm
+            else QMessageBox.StandardButton.Cancel
+        ).click()
+
+    QTimer.singleShot(20, answer_confirmation)
+    c.detect_segments(0.3, 1)
+    if confirm:
+        assert c.detecting
+        assert c.segments == []
+        assert c.segment_list.count() == 0
+        assert c.segment_regions == []
+        assert c.active_segment == -1
+        qtbot.waitUntil(lambda: not c.detecting, timeout=15000)
+        assert [(s.start, s.end) for s in c.segments] == [(0, 2), (2, 4), (4, 6)]
+        assert c.segment_list.count() == len(c.segment_regions) == 3
+        assert all(s is not original for s in c.segments for original in originals)
+    else:
+        assert not c.detecting
+        assert c.segments == originals
+        assert c.segment_list.count() == len(c.segment_regions) == 2
+        assert c.rect() == (20, 30, 160, 120)
 
 
 @pytest.mark.parametrize("placement", ["left", "floating", "hidden"])

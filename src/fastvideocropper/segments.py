@@ -13,6 +13,8 @@ class Segment:
     turns: int
     preset: str
     locked: bool
+    padding_x: int = 0
+    padding_y: int = 0
 
 
 class SceneScan:

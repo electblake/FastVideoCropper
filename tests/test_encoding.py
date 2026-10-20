@@ -4,7 +4,19 @@ import subprocess
 import numpy as np
 import pytest
 
-from fastvideocropper.encoding import Export, rotate_rect
+from fastvideocropper.encoding import Export, padded_rect, rotate_rect
+
+
+@pytest.mark.parametrize(
+    "padding,expected",
+    [
+        ((3, -5), (37, 35, 166, 110)),
+        ((0, 0), (40, 30, 160, 120)),
+        ((50, 100), (0, 0, 250, 240)),
+    ],
+)
+def test_padding_in_source_pixels(padding, expected):
+    assert padded_rect((40, 30, 160, 120), *padding, 320, 240) == expected
 
 
 @pytest.mark.parametrize(

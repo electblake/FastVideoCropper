@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added signed per-segment X/Y pixel padding with a dashed output outline, matching preview masks, and pixel-accurate exports.
+- Added crop-border detection with persisted FFmpeg options and half/third frame presets.
+- Added playback controls for video ends, adjacent segments, and one-second seeking.
 - Added a dockable Segments panel with a View menu visibility toggle and Reset Layout action.
 - Added a Split segment menu action and button that split at the scrubber position in place, preserving crop settings and segment order.
 - Added FFmpeg scene detection with adjustable scene threshold and minimum segment length.
@@ -19,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Asked for confirmation before replacing existing segments with scene detection results.
 - Advanced the video preview with scene-detection progress when Preview while processing was enabled.
 - Saved window geometry, dock placement, floating state, visibility, and splitter sizes under the `mainWindow` QSettings group.
 - Stored application preferences in a QSettings INI file under the platformdirs user config directory, including mute and window layout.
@@ -36,12 +40,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Reset pixel padding for newly opened videos while restoring saved segment padding when returning to a video.
+- Refitted zoomed previews after padding edits and preserved unpadded export rounding.
 - Repainted timeline selection immediately and kept the selected segment row distinct after focus changes.
 - Refreshed cached segment dimensions after loading each video's metadata.
 - Linked scrubber seeking to segment selection and crop settings without moving away from the chosen frame.
 - Displayed each segment's crop, rotation, aspect settings, and time range in the preview as the export queue advances.
 - Prevented queued video frames from marking a new source ready before metadata and duration loaded.
-- Allowed scene detection to be canceled without deleting previous exports or replacing existing segments.
+- Allowed scene detection to be canceled without deleting previous exports; confirmed segment replacements remained cleared.
 - Released temporary dialogs and closed active scans without blocking the UI until detection completed.
 
 ## [0.3.1] - 2026-10-20

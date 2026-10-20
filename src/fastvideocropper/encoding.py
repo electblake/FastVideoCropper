@@ -15,6 +15,7 @@ class Export:
     encoder: str = "libx265"
     device: int = 0
     segment_number: int = 1
+    exact_crop: bool = False
 
     @property
     def output(self):
@@ -28,6 +29,8 @@ class Export:
             self.turns
         ].copy()
         filters.append(f"crop={w:.7f}:{h:.7f}:{x:.7f}:{y:.7f}")
+        if self.exact_crop:
+            filters[-1] += ":exact=1"
         if self.square_pixels:
             filters += ["scale=trunc(iw*sar/2)*2:ih", "setsar=1"]
         quality = {
@@ -68,6 +71,14 @@ class Export:
             "-nostats",
             str(self.output),
         ]
+
+
+def padded_rect(rect, padding_x, padding_y, width, height):
+    x, y, w, h = rect
+    left, top = max(0, x - padding_x), max(0, y - padding_y)
+    right = min(width, x + w + padding_x)
+    bottom = min(height, y + h + padding_y)
+    return left, top, right - left, bottom - top
 
 
 def rotate_rect(rect, width, height):
