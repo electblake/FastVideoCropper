@@ -10,6 +10,8 @@ keyboard. No custom fonts, themes, or widget painting.
   native scrubber with 250 ms keyboard increments.
 - Full-source initial In/Out, Set In/Out at the playhead, precise time entry,
   labeled range indicators independent of playback.
+- Scene detection with live scan progress, cancellation, a selectable segment
+  list, independent segment crops, and separate numbered exports.
 - Bounded third-party crop dragging and eight resize handles, outside mask,
   percentage position and pixel size controls.
 - All twelve specified ratios as direct native buttons, independent aspect locking, center, full-frame reset,
@@ -44,13 +46,13 @@ keyboard. No custom fonts, themes, or widget painting.
 - FFmpeg's `N/A` startup progress records are not elapsed-time samples; only
   timestamp-bearing records update progress.
 
-## Release-channel blocker
+## Release channel
 
-This new repository has no Git remote or published Qt application releases.
-An updater cannot check or install a Qt release that does not exist. Help links
-to the original application's releases for reference; these are **not updates
-for this Python application**. No substitute installer or release endpoint is
-invented.
+Help → Check for Updates queries the latest release of
+`electblake/fastvideocropper`. Downloads use the installer asset matching the
+application version and Windows architecture. Installation starts after the
+application exits. The original application's releases remain a separate
+reference link.
 
 ## Verification limits
 
@@ -62,6 +64,10 @@ stop/finalization and cancellation/deletion.
 Preset checks cover every button while locked and unlocked, keyboard selection,
 reciprocal selection after rotation, restoration on load, and clearing to Custom.
 Position edits preserve unedited fractional dimensions instead of rounding them.
+Segment tests cover real scene boundaries, partial log records, retained trim
+precision, independent crops, numbered exports, progress without scene changes,
+and cancellation without replacing segments or deleting prior exports.
+Metadata and GPU discovery tests verify that the Qt event loop stays responsive.
 Square-pixel export and anamorphic preview-to-source coordinate mapping are
 also exercised with real media, both before and after rotation. Embedded display
 rotation is checked against the video item's actual bounds and a real export.

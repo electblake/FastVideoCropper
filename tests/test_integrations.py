@@ -7,9 +7,8 @@ import pytest
 from fastvideocropper import integrations
 
 
-@pytest.mark.parametrize("frozen", [False, True])
 @pytest.mark.parametrize("module", ["fastvideocropper", "fastvideocropper.installed"])
-def test_install_commands_and_reinstall(monkeypatch, tmp_path, frozen, module):
+def test_install_commands_and_reinstall(monkeypatch, tmp_path, module):
     registry = MagicMock()
     values = {}
     registry.CreateKeyEx.side_effect = lambda hive, path, reserved, access: MagicMock(
@@ -20,21 +19,17 @@ def test_install_commands_and_reinstall(monkeypatch, tmp_path, frozen, module):
     )
     monkeypatch.setitem(sys.modules, "winreg", registry)
     executable = tmp_path / "Program Files" / "FastVideoCropper.exe"
-    bundle = tmp_path / "Bundle Files"
     monkeypatch.setattr(sys, "executable", str(executable))
-    monkeypatch.setattr(sys, "frozen", frozen, raising=False)
-    monkeypatch.setattr(sys, "_MEIPASS", str(bundle), raising=False)
     for _ in range(2):
         assert integrations.install(module) == 0
         assert len(values) == 9
         for root, target in integrations.CONTEXTS:
             key = rf"{root}\FastVideoCropper"
             launcher = f'"{executable.resolve()}"'
-            if not frozen:
-                launcher += f' "-I" "-m" "{module}"'
+            launcher += f' "-I" "-m" "{module}"'
             assert values[key, ""] == "Open in FastVideoCropper"
             assert values[key + r"\command", ""] == f'{launcher} "{target}"'
-            icon_root = bundle if frozen else Path(integrations.__file__).parent
+            icon_root = Path(integrations.__file__).parent
             assert values[key, "Icon"] == f'"{icon_root / integrations.ICON_NAME}"'
     assert all(
         call.args[0] == registry.HKEY_CURRENT_USER

@@ -32,3 +32,37 @@ def source(tmp_path_factory):
         creationflags=subprocess.CREATE_NO_WINDOW,
     )
     return path
+
+
+@pytest.fixture
+def scene_video(tmp_path):
+    path = tmp_path / "scenes.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=black:s=320x240:r=10:d=2",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=white:s=320x240:r=10:d=2",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=black:s=320x240:r=10:d=2",
+            "-filter_complex",
+            "[0:v][1:v][2:v]concat=n=3:v=1:a=0",
+            "-c:v",
+            "libx264",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+    return path

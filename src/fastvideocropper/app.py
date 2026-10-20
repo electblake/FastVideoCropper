@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMainWindow,
     QPlainTextEdit,
     QProgressBar,
@@ -52,6 +53,7 @@ from PySide6.QtWidgets import (
 
 from . import APP_NAME, APP_VERSION, integrations
 from .encoding import Export, rotate_rect
+from .segments import SceneScan, Segment
 from .updates import RELEASES_URL, UpdateDialog
 
 RATIOS = {
@@ -94,6 +96,9 @@ class Application(QObject):
         self.width = self.height = 1.0
         self.pixel_width = self.pixel_height = 1.0
         self.ready = False
+        self.loading = False
+        self.resolving_encoder = False
+        self.closing = False
         self.running = False
         self.installing = False
         self.paused = False
@@ -103,6 +108,14 @@ class Application(QObject):
         self.progress_buffer = ""
         self.progress_values = {}
         self.seek_pending = False
+        self.segments = []
+        self.source_segments = {}
+        self.active_segment = -1
+        self.restoring_segment = False
+        self.detecting = False
+        self.segment_regions = []
+        self.export_jobs = []
+        self.export_index = 0
         self.window = QMainWindow()
         self.window.pending_installer = None
         self.update_dialog = UpdateDialog(self.window)
@@ -119,6 +132,10 @@ class Application(QObject):
         self.video.setAspectRatioMode(Qt.AspectRatioMode.IgnoreAspectRatio)
         self.player.setVideoOutput(self.video)
         self.process = QProcess(self)
+        self.probe = QProcess(self)
+        self.probe.finished.connect(self.media_probed)
+        self.gpu_probe = QProcess(self)
+        self.gpu_probe.finished.connect(self.encoder_probed)
         self.process.readyReadStandardOutput.connect(self.read_progress)
         self.process.readyReadStandardError.connect(self.read_log)
         self.process.finished.connect(self.finished)
@@ -170,6 +187,13 @@ class Application(QObject):
         quit_action = menu.addAction("&Quit")
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
         quit_action.triggered.connect(self.window.close)
+        segment_menu = self.window.menuBar().addMenu("&Segment")
+        self.detect_action = segment_menu.addAction(
+            "&Detect segments…", self.show_scene_detection
+        )
+        self.clear_segments_action = segment_menu.addAction(
+            "&Clear segments", self.clear_segments
+        )
         help_menu = self.window.menuBar().addMenu("&Help")
         self.check_update_action = help_menu.addAction(
             "Check for Updates", self.check_updates
@@ -274,15 +298,26 @@ class Application(QObject):
         playback.addWidget(self.seek)
         self.range_graph = pg.GraphicsLayoutWidget()
         self.range_graph.setBackground(self.window.palette().window().color())
-        self.range_graph.setFixedHeight(self.window.fontMetrics().height() * 2)
+        self.range_graph.setFixedHeight(self.window.fontMetrics().height() * 4)
         self.range_view = self.range_graph.addViewBox(
             enableMouse=False, enableMenu=False
         )
         self.range_region = pg.LinearRegionItem((0, 1), movable=False)
         self.range_view.addItem(self.range_region)
+        self.range_graph.scene().sigMouseClicked.connect(self.select_timeline_segment)
         self.range_labels = [
-            pg.InfLineLabel(self.range_region.lines[0], "In", position=0.5),
-            pg.InfLineLabel(self.range_region.lines[1], "Out", position=0.5),
+            pg.InfLineLabel(
+                self.range_region.lines[0],
+                "In",
+                position=0.2,
+                color=self.window.palette().text().color(),
+            ),
+            pg.InfLineLabel(
+                self.range_region.lines[1],
+                "Out",
+                position=0.2,
+                color=self.window.palette().text().color(),
+            ),
         ]
         playback.addWidget(self.range_graph)
         buttons = QHBoxLayout()
@@ -335,6 +370,22 @@ class Application(QObject):
         splitter.addWidget(left)
         right = QWidget()
         right_layout = QVBoxLayout(right)
+        right_layout.addWidget(QLabel("Segments"))
+        self.segment_list = QListWidget()
+        self.segment_list.setAccessibleName("Video segments")
+        self.segment_list.currentRowChanged.connect(self.select_segment)
+        right_layout.addWidget(self.segment_list, 1)
+        self.segment_summary = QLabel("No segments — detect scenes to begin")
+        self.segment_summary.setWordWrap(True)
+        right_layout.addWidget(self.segment_summary)
+        segment_buttons = QHBoxLayout()
+        self.detect_button = self.button(
+            "Detect segments…", self.show_scene_detection, segment_buttons
+        )
+        self.clear_segments_button = self.button(
+            "Clear segments", self.clear_segments, segment_buttons
+        )
+        right_layout.addLayout(segment_buttons)
         tabs = QTabWidget()
         right_layout.addWidget(tabs, 1)
         self.crop_page = QWidget()
@@ -459,6 +510,7 @@ class Application(QObject):
         tabs.addTab(options_scroll, "Settings")
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
+        self.log.setMaximumBlockCount(2000)
         tabs.addTab(self.log, "Process log")
         self.export_button = self.button("Crop!", self.export, right_layout)
         self.advance = QCheckBox("Load next after completion")
@@ -492,6 +544,216 @@ class Application(QObject):
             "Source preview • output replaces an existing _CROPPED file"
         )
 
+    def show_scene_detection(self):
+        self.count_cancelled()
+        dialog = QDialog(self.window)
+        dialog.setWindowTitle("Detect segments")
+        layout = QVBoxLayout(dialog)
+        description = QLabel(
+            "Find scene changes across the whole video. This replaces the current "
+            "segments; new segments inherit the current crop settings."
+        )
+        description.setWordWrap(True)
+        layout.addWidget(description)
+        form = QFormLayout()
+        threshold = QDoubleSpinBox()
+        threshold.setRange(0, 1)
+        threshold.setDecimals(2)
+        threshold.setSingleStep(0.05)
+        threshold.setValue(0.3)
+        threshold.setToolTip(
+            "Lower values detect smaller changes and usually create more segments."
+        )
+        form.addRow("Scene &threshold", threshold)
+        minimum = QDoubleSpinBox()
+        minimum.setRange(0, self.player.duration() / 1000)
+        minimum.setDecimals(3)
+        minimum.setSuffix(" s")
+        minimum.setValue(1)
+        minimum.setToolTip("Ignore cuts that would create a shorter segment.")
+        form.addRow("&Minimum segment length", minimum)
+        layout.addLayout(form)
+        hint = QLabel(
+            "Lower threshold = more cuts. Increase minimum length to skip short scenes."
+        )
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Detect segments")
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.detect_segments(threshold.value(), minimum.value())
+        dialog.deleteLater()
+
+    def detect_segments(self, threshold, minimum):
+        self.count_cancelled()
+        self.player.pause()
+        self.detecting = True
+        self.running = True
+        self.outcome = ""
+        self.progress_buffer = ""
+        self.progress_values = {}
+        self.progress.setRange(0, 100)
+        self.detection_progress(0, 0)
+        self.scene_scan = SceneScan(
+            self.paths[self.index],
+            self.player.duration() / 1000,
+            threshold,
+            minimum,
+        )
+        self.log.clear()
+        self.log.appendPlainText(
+            subprocess.list2cmdline([self.ffmpeg, *self.scene_scan.arguments()])
+        )
+        self.update_enabled()
+        self.process.start(self.ffmpeg, self.scene_scan.arguments())
+
+    def detection_progress(self, seconds, cuts):
+        duration = self.player.duration() / 1000
+        self.progress.setValue(min(99, int(seconds / duration * 100)))
+        self.progress_text.setText(
+            f"Detecting scenes • {self.progress.value()}% • "
+            f"{seconds:.1f} / {duration:.1f} s scanned • {cuts} cuts found"
+        )
+
+    def replace_segments(self, ranges):
+        x, y, w, h = self.rect()
+        rect = x / self.width, y / self.height, w / self.width, h / self.height
+        self.active_segment = -1
+        self.segments[:] = [
+            Segment(
+                start,
+                end,
+                rect,
+                self.turns,
+                self.selected_preset,
+                self.lock.isChecked(),
+            )
+            for start, end in ranges
+        ]
+        self.refresh_segments()
+        self.segment_list.setCurrentRow(0)
+        self.progress.setValue(100)
+        self.progress_text.setText(
+            f"Scene detection complete — {len(self.segments)} segments"
+        )
+        self.update_enabled()
+
+    def clear_segments(self):
+        self.active_segment = -1
+        self.segments.clear()
+        self.refresh_segments()
+        self.start.setValue(0)
+        self.end.setValue(self.end.maximum())
+        self.progress.setValue(0)
+        self.progress_text.setText("Ready")
+        self.update_enabled()
+
+    def segment_text(self, index):
+        segment = self.segments[index]
+        return (
+            f"{index + 1:02d}   {segment.start:.3f} – {segment.end:.3f} s\n"
+            f"Duration {segment.end - segment.start:.3f} s\n"
+            f"{segment.preset} • Rotation {segment.turns * 90}°"
+        )
+
+    def refresh_segments(self):
+        self.segment_list.blockSignals(True)
+        self.segment_list.clear()
+        self.segment_list.addItems(
+            [self.segment_text(i) for i in range(len(self.segments))]
+        )
+        self.segment_list.blockSignals(False)
+        for region in self.segment_regions:
+            self.range_view.removeItem(region)
+        self.segment_regions.clear()
+        palette = self.window.palette()
+        brush = palette.highlight().color()
+        brush.setAlpha(60)
+        for index, segment in enumerate(self.segments):
+            region = pg.LinearRegionItem(
+                (segment.start, segment.end),
+                movable=False,
+                brush=brush,
+                pen=palette.text().color(),
+            )
+            region.setZValue(-1)
+            self.range_view.addItem(region)
+            self.segment_regions.append(region)
+            pg.InfLineLabel(
+                region.lines[0],
+                str(index + 1),
+                position=0.85,
+                anchors=[(0, 0.5), (0, 0.5)],
+                color=palette.text().color(),
+            )
+        self.update_segment_summary()
+
+    def update_segment_summary(self):
+        if self.segments:
+            total = sum(segment.end - segment.start for segment in self.segments)
+            self.segment_summary.setText(
+                f"{len(self.segments)} segments • {total:.3f} s total"
+            )
+            self.export_button.setText(f"Export {len(self.segments)} segments")
+        else:
+            self.segment_summary.setText("No segments — detect scenes to begin")
+            self.export_button.setText("Crop!")
+
+    def save_segment(self):
+        if self.active_segment < 0 or self.restoring_segment:
+            return
+        segment = self.segments[self.active_segment]
+        x, y, w, h = self.rect()
+        segment.rect = x / self.width, y / self.height, w / self.width, h / self.height
+        segment.turns = self.turns
+        segment.preset = self.selected_preset
+        segment.locked = self.lock.isChecked()
+        self.segment_list.item(self.active_segment).setText(
+            self.segment_text(self.active_segment)
+        )
+        self.segment_regions[self.active_segment].setRegion(
+            (segment.start, segment.end)
+        )
+        self.update_segment_summary()
+
+    def select_segment(self, index):
+        if index < 0:
+            return
+        self.save_segment()
+        self.restoring_segment = True
+        segment = self.segments[index]
+        self.rotate((segment.turns - self.turns) % 4)
+        x, y, w, h = segment.rect
+        self.set_rect(
+            (x * self.width, y * self.height, w * self.width, h * self.height)
+        )
+        self.set_preset(segment.preset)
+        self.lock.setChecked(segment.locked)
+        self.start.setValue(segment.start)
+        self.end.setValue(segment.end)
+        self.active_segment = index
+        self.restoring_segment = False
+        self.fit()
+        self.player.setPosition(round(segment.start * 1000))
+
+    def select_timeline_segment(self, event):
+        if (
+            self.running
+            or self.detecting
+            or event.button() != Qt.MouseButton.LeftButton
+        ):
+            return
+        position = self.range_view.mapSceneToView(event.scenePos()).x()
+        for index, segment in enumerate(self.segments):
+            if segment.start <= position < segment.end:
+                self.segment_list.setCurrentRow(index)
+                break
+
     def open_files(self):
         paths, _ = QFileDialog.getOpenFileNames(
             self.window,
@@ -505,37 +767,46 @@ class Application(QObject):
 
     def load(self, index):
         self.count_cancelled()
+        self.save_segment()
+        self.active_segment = -1
+        self.segments = self.source_segments.setdefault(self.paths[index], [])
+        self.refresh_segments()
         self.ready = False
+        self.loading = True
         self.index = index
         self.player.stop()
-        stream = json.loads(
-            subprocess.check_output(
-                [
-                    self.ffprobe,
-                    "-v",
-                    "error",
-                    "-select_streams",
-                    "v:0",
-                    "-show_entries",
-                    "stream=width,height:stream_side_data=rotation",
-                    "-of",
-                    "json",
-                    str(self.paths[index]),
-                ],
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-        )["streams"][0]
+        self.player.setSource(QUrl())
+        self.output = None
+        self.progress.setValue(0)
+        self.progress_text.setText("Loading video…")
+        self.update_enabled()
+        self.probe.start(
+            self.ffprobe,
+            [
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height:stream_side_data=rotation",
+                "-of",
+                "json",
+                str(self.paths[index]),
+            ],
+        )
+
+    def media_probed(self):
+        stream = json.loads(bytes(self.probe.readAllStandardOutput()))["streams"][0]
         self.source_width, self.source_height = stream["width"], stream["height"]
         self.source_rotation = 0
         if "side_data_list" in stream:
             for data in stream["side_data_list"]:
                 if "rotation" in data:
                     self.source_rotation = data["rotation"] // 90
-        self.player.setSource(QUrl())
-        self.player.setSource(QUrl.fromLocalFile(str(self.paths[index])))
+        self.player.setSource(QUrl.fromLocalFile(str(self.paths[self.index])))
         self.title.setText(
-            f"{index + 1}/{len(self.paths)} • {self.paths[index].name}"
-            + (" • Done" if self.paths[index] in self.done else " • Pending")
+            f"{self.index + 1}/{len(self.paths)} • {self.paths[self.index].name}"
+            + (" • Done" if self.paths[self.index] in self.done else " • Pending")
         )
         self.output = None
         self.update_enabled()
@@ -558,6 +829,8 @@ class Application(QObject):
             (x * self.width, y * self.height, w * self.width, h * self.height)
         )
         self.ready = True
+        self.loading = False
+        self.progress_text.setText("Ready")
         self.set_preset(preset)
         self.apply_preset()
         if centered:
@@ -567,9 +840,18 @@ class Application(QObject):
         self.fit()
         self.update_enabled()
 
+        if self.segments:
+            self.segment_list.setCurrentRow(0)
+
     def frame_changed(self, frame):
         self.seek_pending = False
-        if not self.ready and frame.isValid():
+        if (
+            not self.ready
+            and frame.isValid()
+            and self.probe.state() == QProcess.ProcessState.NotRunning
+            and self.player.duration() > 0
+            and not self.player.source().isEmpty()
+        ):
             self.pixel_width, self.pixel_height = self.source_width, self.source_height
             if (self.source_rotation + self.turns) % 2:
                 self.pixel_width, self.pixel_height = (
@@ -583,15 +865,32 @@ class Application(QObject):
 
     def duration_changed(self, duration):
         self.seek.setRange(0, duration)
+        self.start.blockSignals(True)
+        self.end.blockSignals(True)
         self.start.setMaximum(duration / 1000)
         self.end.setMaximum(duration / 1000)
-        self.start.setValue(0)
-        self.end.setValue(duration / 1000)
+        if self.active_segment >= 0:
+            segment = self.segments[self.active_segment]
+            self.start.setValue(segment.start)
+            self.end.setValue(segment.end)
+        else:
+            self.start.setValue(0)
+            self.end.setValue(duration / 1000)
+        self.start.blockSignals(False)
+        self.end.blockSignals(False)
+        self.range_region.setRegion((self.start.value(), self.end.value()))
         self.position_changed(self.player.position())
         self.range_view.setXRange(0, duration / 1000, padding=0)
 
     def range_changed(self):
         self.range_region.setRegion((self.start.value(), self.end.value()))
+        if self.active_segment >= 0 and not self.restoring_segment:
+            segment = self.segments[self.active_segment]
+            if self.sender() is self.start:
+                segment.start = self.start.value()
+            if self.sender() is self.end:
+                segment.end = self.end.value()
+        self.save_segment()
 
     def position_changed(self, position):
         self.seek.blockSignals(True)
@@ -667,6 +966,7 @@ class Application(QObject):
                 if h and abs(w / h - ratio) > 0.001:
                     self.set_preset("Custom")
             self.settings.setValue("preset", self.selected_preset)
+            self.save_segment()
 
     def geometry_finished(self):
         if self.zoom.isChecked():
@@ -720,6 +1020,7 @@ class Application(QObject):
             if self.lock.isChecked():
                 center = [0 if v == 0.5 else v for v in center]
             self.roi.addScaleHandle(pos, center, lockAspect=self.lock.isChecked())
+        self.save_segment()
 
     def set_preset(self, name):
         self.selected_preset = name
@@ -771,6 +1072,7 @@ class Application(QObject):
         self.set_preset(preset)
         self.settings.setValue("preset", preset)
         self.settings.setValue("turns", self.turns)
+        self.save_segment()
         self.fit()
 
     def apply_rotation(self):
@@ -793,50 +1095,87 @@ class Application(QObject):
 
     def export(self):
         self.count_cancelled()
+        self.save_segment()
         encoder = self.encoder.currentData()
         if encoder == "auto":
-            devices = json.loads(
-                subprocess.check_output(
-                    [
-                        "powershell.exe",
-                        "-NoProfile",
-                        "-Command",
-                        "ConvertTo-Json -InputObject @(Get-CimInstance Win32_VideoController | Select-Object Name) -Compress",
-                    ],
-                    creationflags=subprocess.CREATE_NO_WINDOW,
+            self.resolving_encoder = True
+            self.progress_text.setText("Detecting GPU encoder…")
+            self.update_enabled()
+            self.gpu_probe.start(
+                "powershell.exe",
+                [
+                    "-NoProfile",
+                    "-Command",
+                    "ConvertTo-Json -InputObject @(Get-CimInstance Win32_VideoController | Select-Object Name) -Compress",
+                ],
+            )
+        else:
+            self.export_with_encoder(encoder)
+
+    def encoder_probed(self):
+        devices = json.loads(bytes(self.gpu_probe.readAllStandardOutput()))
+        encoder = next(
+            key
+            for names, key in [
+                (("nvidia",), "hevc_nvenc"),
+                (("intel",), "hevc_qsv"),
+                (("amd", "radeon"), "hevc_amf"),
+            ]
+            if key in self.compiled_encoders
+            and any(
+                name in device["Name"].lower() for name in names for device in devices
+            )
+        )
+        self.resolving_encoder = False
+        self.export_with_encoder(encoder)
+
+    def export_with_encoder(self, encoder):
+        self.export_jobs = []
+        for index, segment in enumerate(self.segments):
+            width, height = self.source_width, self.source_height
+            if (self.source_rotation + segment.turns) % 2:
+                width, height = height, width
+            x, y, w, h = segment.rect
+            self.export_jobs.append(
+                Export(
+                    self.paths[self.index],
+                    (x * width, y * height, w * width, h * height),
+                    segment.turns,
+                    segment.start,
+                    segment.end,
+                    self.square.isChecked(),
+                    encoder,
+                    self.device.value(),
+                    index + 1,
                 )
             )
-            encoder = next(
-                key
-                for names, key in [
-                    (("nvidia",), "hevc_nvenc"),
-                    (("intel",), "hevc_qsv"),
-                    (("amd", "radeon"), "hevc_amf"),
-                ]
-                if key in self.compiled_encoders
-                and any(
-                    name in device["Name"].lower()
-                    for name in names
-                    for device in devices
-                )
+        if not self.segments:
+            x, y, w, h = self.rect()
+            pixel_rect = (
+                x / self.width * self.pixel_width,
+                y / self.height * self.pixel_height,
+                w / self.width * self.pixel_width,
+                h / self.height * self.pixel_height,
             )
-        x, y, w, h = self.rect()
-        pixel_rect = (
-            x / self.width * self.pixel_width,
-            y / self.height * self.pixel_height,
-            w / self.width * self.pixel_width,
-            h / self.height * self.pixel_height,
-        )
-        self.job = Export(
-            self.paths[self.index],
-            pixel_rect,
-            self.turns,
-            self.start.value(),
-            self.end.value(),
-            self.square.isChecked(),
-            encoder,
-            self.device.value(),
-        )
+            job = Export(
+                self.paths[self.index],
+                pixel_rect,
+                self.turns,
+                self.start.value(),
+                self.end.value(),
+                self.square.isChecked(),
+                encoder,
+                self.device.value(),
+            )
+            self.export_jobs.append(job)
+        self.export_index = 0
+        self.log.clear()
+        self.start_export_job()
+
+    def start_export_job(self):
+        self.job = self.export_jobs[self.export_index]
+        if self.segments:
+            self.segment_list.setCurrentRow(self.export_index)
         self.output = self.job.output
         self.done.discard(self.job.source)
         self.running = True
@@ -848,7 +1187,6 @@ class Application(QObject):
         self.seek_pending = False
         self.progress.setValue(0)
         self.progress_text.setText("Starting…")
-        self.log.clear()
         self.log.appendPlainText(
             subprocess.list2cmdline([self.ffmpeg, *self.job.arguments()])
         )
@@ -863,14 +1201,14 @@ class Application(QObject):
         self.install_status.setText("Installing…")
         self.progress_text.setText("Installing in File Explorer…")
         self.update_enabled()
-        arguments = ["--install-explorer"]
-        if not getattr(sys, "frozen", False):
-            arguments = ["-I", "-m", self.launcher_module, *arguments]
+        arguments = ["-I", "-m", self.launcher_module, "--install-explorer"]
         self.process.start(str(Path(sys.executable).resolve()), arguments)
 
     def read_log(self):
         text = bytes(self.process.readAllStandardError()).decode("utf-8")
         self.log.appendPlainText(text)
+        if self.detecting:
+            self.scene_scan.read_log(text)
 
     def read_progress(self):
         if self.installing:
@@ -887,6 +1225,13 @@ class Application(QObject):
             key, _, value = line.strip().partition("=")
             self.progress_values[key] = value
             if key == "progress" and self.progress_values["out_time_us"] != "N/A":
+                if self.detecting:
+                    self.read_log()
+                    self.detection_progress(
+                        float(self.progress_values["out_time_us"]) / 1000000,
+                        len(self.scene_scan.boundaries) - 1,
+                    )
+                    continue
                 elapsed = min(
                     float(self.progress_values["out_time_us"]) / 1000000,
                     self.job.end - self.job.start,
@@ -899,6 +1244,7 @@ class Application(QObject):
                 if speed != "N/A" and float(speed.rstrip("x")) > 0:
                     eta = f" • ETA {(self.job.end - self.job.start - elapsed) / float(speed.rstrip('x')):.0f} s"
                 self.progress_text.setText(
+                    f"{self.export_index + 1}/{len(self.export_jobs)} • "
                     f"{self.progress.value()}% • {self.progress_values['fps']} fps • {speed}{eta}"
                 )
                 self.processing_position = self.job.start + max(0, elapsed)
@@ -910,13 +1256,20 @@ class Application(QObject):
             self.player.setPosition(position)
 
     def preview_changed(self):
-        follow = self.running and not self.installing and self.preview.isChecked()
+        follow = (
+            self.running
+            and not self.installing
+            and not self.detecting
+            and self.preview.isChecked()
+        )
         if follow:
             self.player.pause()
             self.follow_timer.start()
         else:
             self.follow_timer.stop()
-        self.transport.setEnabled(self.ready and not follow)
+        self.transport.setEnabled(
+            self.ready and not self.running and not self.detecting
+        )
 
     def pause_export(self):
         process = psutil.Process(self.process.processId())
@@ -940,6 +1293,12 @@ class Application(QObject):
 
     def cancel_export(self):
         self.outcome = "cancel"
+        if self.process.state() == QProcess.ProcessState.Starting:
+            self.process.started.connect(
+                self.cancel_export, Qt.ConnectionType.SingleShotConnection
+            )
+            return
+        # Tool-manager launchers can own the actual FFmpeg child process.
         children = psutil.Process(self.process.processId()).children(recursive=True)
         for child in children:
             child.kill()
@@ -960,22 +1319,38 @@ class Application(QObject):
             self.update_enabled()
             return
         self.read_log()
+        self.read_progress()
+        detecting = self.detecting
+        self.detecting = False
         self.running = False
         self.follow_timer.stop()
         self.pause.setText("Pause")
         if self.outcome == "cancel":
-            self.output.unlink()
-            self.output = None
-            self.progress_text.setText("Canceled — output deleted")
+            if detecting:
+                self.progress_text.setText("Scene detection canceled")
+            else:
+                self.output.unlink()
+                self.output = None
+                self.progress_text.setText("Canceled — output deleted")
         elif code != 0:
             self.progress_text.setText(
                 f"FFmpeg exited with code {code} — see Process log"
             )
         elif self.outcome == "stop":
             self.progress_text.setText("Stopped — output saved")
+        elif detecting:
+            self.replace_segments(self.scene_scan.ranges())
         else:
+            if self.export_index + 1 < len(self.export_jobs):
+                self.export_index += 1
+                self.start_export_job()
+                return
             self.progress.setValue(100)
-            self.progress_text.setText("Complete — output saved")
+            self.progress_text.setText(
+                f"Complete — {len(self.export_jobs)} segments saved"
+                if self.segments
+                else "Complete — output saved"
+            )
             self.done.add(self.job.source)
             self.title.setText(
                 f"{self.index + 1}/{len(self.paths)} • {self.job.source.name} • Done"
@@ -1026,25 +1401,37 @@ class Application(QObject):
         self.count_cancel.hide()
 
     def update_enabled(self):
-        self.check_update_action.setEnabled(not self.running)
-        self.check_update_button.setEnabled(not self.running)
-        self.install_button.setEnabled(not self.running)
-        self.folder.setEnabled(not self.running)
+        busy = self.running or self.loading or self.resolving_encoder
+        self.detect_action.setEnabled(self.ready and not busy)
+        self.detect_button.setEnabled(self.ready and not busy)
+        self.clear_segments_action.setEnabled(bool(self.segments) and not busy)
+        self.clear_segments_button.setEnabled(bool(self.segments) and not busy)
+        self.segment_list.setEnabled(self.ready and not busy)
+        self.check_update_action.setEnabled(not busy)
+        self.check_update_button.setEnabled(not busy)
+        self.install_button.setEnabled(not busy)
+        self.folder.setEnabled(not busy)
         self.count_now.setEnabled(self.count_action == "quit" or self.ready)
-        self.open_button.setEnabled(not self.running)
-        self.open_action.setEnabled(not self.running)
-        self.previous.setEnabled(not self.running and self.index > 0)
-        self.next.setEnabled(not self.running and self.index + 1 < len(self.paths))
-        self.export_button.setEnabled(self.ready and not self.running)
-        self.crop_page.setEnabled(self.ready and not self.running)
-        self.roi.setEnabled(self.ready and not self.running)
-        self.encoder.setEnabled(not self.running)
-        self.device.setEnabled(not self.running)
-        self.transport.setEnabled(
-            self.ready and not (self.running and self.preview.isChecked())
+        self.open_button.setEnabled(not busy)
+        self.open_action.setEnabled(not busy)
+        self.previous.setEnabled(not busy and self.index > 0)
+        self.next.setEnabled(not busy and self.index + 1 < len(self.paths))
+        self.export_button.setEnabled(self.ready and not busy)
+        self.crop_page.setEnabled(self.ready and not busy)
+        self.roi.setEnabled(self.ready and not busy)
+        self.encoder.setEnabled(not busy)
+        self.device.setEnabled(not busy)
+        self.transport.setEnabled(self.ready and not busy)
+        self.cancel.setEnabled(self.running and not self.installing)
+        self.pause.setEnabled(
+            self.running and not self.installing and not self.detecting
         )
-        for button in (self.pause, self.stop, self.cancel):
-            button.setEnabled(self.running and not self.installing)
+        self.stop.setEnabled(
+            self.running and not self.installing and not self.detecting
+        )
+        self.cancel.setText(
+            "Cancel detection" if self.detecting else "Cancel and delete"
+        )
         self.locate.setEnabled(self.output is not None and not self.running)
 
     def locate_output(self):
@@ -1087,6 +1474,7 @@ class Application(QObject):
         layout.addWidget(buttons)
         dialog.resize(600, 400)
         dialog.exec()
+        dialog.deleteLater()
 
     def save_report(self):
         filename, _ = QFileDialog.getSaveFileName(
@@ -1100,11 +1488,20 @@ class Application(QObject):
             if (
                 event.type() == QEvent.Type.DragEnter
                 and not self.running
+                and not self.detecting
+                and not self.loading
+                and not self.resolving_encoder
                 and event.mimeData().hasUrls()
             ):
                 event.acceptProposedAction()
                 return True
-            if event.type() == QEvent.Type.Drop and not self.running:
+            if (
+                event.type() == QEvent.Type.Drop
+                and not self.running
+                and not self.detecting
+                and not self.loading
+                and not self.resolving_encoder
+            ):
                 self.paths = [
                     Path(url.toLocalFile()) for url in event.mimeData().urls()
                 ]
@@ -1115,17 +1512,29 @@ class Application(QObject):
                 if self.update_dialog.busy:
                     event.ignore()
                     return True
+                if self.running:
+                    event.ignore()
+                    if not self.closing:
+                        self.closing = True
+                        self.process.finished.connect(self.window.close)
+                        if not self.installing:
+                            self.cancel_export()
+                    return True
                 for worker in self.update_dialog.workers:
                     worker.wait()
+                if self.probe.state() != QProcess.ProcessState.NotRunning:
+                    self.probe.finished.disconnect(self.media_probed)
+                    self.probe.kill()
+                    self.probe.waitForFinished()
+                if self.gpu_probe.state() != QProcess.ProcessState.NotRunning:
+                    self.gpu_probe.finished.disconnect(self.encoder_probed)
+                    self.gpu_probe.kill()
+                    self.gpu_probe.waitForFinished()
                 self.window.removeEventFilter(self)
                 self.viewport.removeEventFilter(self)
                 self.resize_timer.stop()
                 self.follow_timer.stop()
                 self.count_timer.stop()
-                if self.running:
-                    if not self.installing:
-                        self.cancel_export()
-                    self.process.waitForFinished(-1)
                 self.player.stop()
                 self.player.setSource(QUrl())
                 self.settings.sync()

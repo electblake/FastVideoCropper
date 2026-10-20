@@ -5,9 +5,9 @@ from unittest.mock import MagicMock
 
 import psutil
 import pytest
-from PySide6.QtCore import QMimeData, QPointF, QSettings, Qt, QUrl
+from PySide6.QtCore import QMimeData, QPointF, QSettings, Qt, QTimer, QUrl
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox
 
 from fastvideocropper import app
 
@@ -52,6 +52,226 @@ def test_load_crop_rotate_export(controller, qtbot, source, tmp_path):
     qtbot.waitUntil(lambda: c.ready and c.end.value() == 8, timeout=15000)
     assert c.start.value() == 0
     assert c.rect() == (100, 60, 120, 120)
+
+
+def test_detect_select_clear_segments(controller, qtbot, scene_video, tmp_path):
+    c = controller
+    c.paths = [scene_video]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready and c.end.value() == 6, timeout=15000)
+    c.detection_progress(3, 1)
+    assert c.progress.value() == 50
+    assert "3.0 / 6.0 s scanned • 1 cuts found" in c.progress_text.text()
+
+    def accept_detection():
+        dialog = next(
+            d
+            for d in c.window.findChildren(QDialog)
+            if d.windowTitle() == "Detect segments"
+        )
+        dialog.grab().save(str(tmp_path / "detection-dialog.png"))
+        dialog.findChild(QDialogButtonBox).button(
+            QDialogButtonBox.StandardButton.Ok
+        ).click()
+
+    QTimer.singleShot(100, accept_detection)
+    c.detect_action.trigger()
+    assert not c.detect_button.isEnabled()
+    assert not c.open_action.isEnabled()
+    qtbot.waitUntil(lambda: not c.detecting, timeout=15000)
+    assert c.progress.value() == 100
+    assert c.progress_text.text() == "Scene detection complete — 3 segments"
+    assert [(s.start, s.end) for s in c.segments] == [(0, 2), (2, 4), (4, 6)]
+    assert c.segment_list.count() == 3
+    assert len(c.segment_regions) == 3
+    point = c.range_view.mapViewToScene(QPointF(5, 0.5))
+    qtbot.mouseClick(
+        c.range_graph.viewport(),
+        Qt.MouseButton.LeftButton,
+        pos=c.range_graph.mapFromScene(point),
+    )
+    assert c.active_segment == 2
+    c.segment_list.setFocus()
+    qtbot.keyClick(c.segment_list, Qt.Key.Key_Home)
+    assert c.active_segment == 0
+    c.set_rect((20, 30, 160, 120))
+    c.lock.setChecked(True)
+    c.rotate(1)
+    first_rect = c.rect()
+    c.segment_list.setCurrentRow(1)
+    assert c.turns == 0
+    assert c.rect() == (0, 0, 320, 240)
+    assert not c.lock.isChecked()
+    assert (c.start.value(), c.end.value()) == (2, 4)
+    c.set_rect((40, 50, 100, 80))
+    c.segment_list.setCurrentRow(0)
+    assert c.turns == 1
+    assert c.rect() == first_rect
+    assert c.lock.isChecked()
+    c.segment_list.setCurrentRow(1)
+    assert c.rect() == (40, 50, 100, 80)
+    c.window.grab().save(str(tmp_path / "segments-window.png"))
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready and c.active_segment == 0, timeout=15000)
+    assert c.rect() == first_rect
+    assert (c.start.value(), c.end.value()) == (0, 2)
+    c.clear_segments_action.trigger()
+    assert c.segments == []
+    assert c.segment_list.count() == 0
+    assert c.segment_regions == []
+    assert (c.start.value(), c.end.value()) == (0, 6)
+    assert c.detect_button.isEnabled()
+    c.detect_segments(0.3, 1)
+    qtbot.waitUntil(lambda: not c.detecting, timeout=15000)
+    assert len(c.segments) == 3
+
+
+def test_export_segments_with_independent_crops(controller, qtbot, source):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready and c.end.value() == 8, timeout=15000)
+    c.replace_segments([(0, 2), (2, 8)])
+    c.set_rect((20, 30, 160, 120))
+    c.segment_list.setCurrentRow(1)
+    c.rotate(1)
+    c.set_rect((10, 20, 100, 200))
+    c.export()
+    assert not c.clear_segments_action.isEnabled()
+    qtbot.waitUntil(lambda: not c.running, timeout=30000)
+    assert c.progress_text.text() == "Complete — 2 segments saved"
+    assert source in c.done
+    for job, size, frames in zip(c.export_jobs, [(160, 120), (100, 200)], [20, 60]):
+        metadata = json.loads(
+            subprocess.check_output(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-show_streams",
+                    "-of",
+                    "json",
+                    str(job.output),
+                ],
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+        )
+        video, audio = metadata["streams"]
+        assert (video["width"], video["height"]) == size
+        assert int(video["nb_frames"]) == frames
+        assert audio["codec_name"] == "aac"
+        assert float(audio["duration"]) == pytest.approx(frames / 10, abs=0.05)
+    assert c.export_jobs[0].output.name.endswith("_SEGMENT_001_CROPPED.mp4")
+    assert c.export_jobs[1].output.name.endswith("_SEGMENT_002_CROPPED.mp4")
+
+
+def test_editing_one_boundary_preserves_other_precision(controller, qtbot, source):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 2.033333333), (2.033333333, 8)])
+    c.start.setValue(0.5)
+    assert c.segments[0].end == 2.033333333
+    c.segment_list.setCurrentRow(1)
+    c.end.setValue(7.5)
+    assert c.segments[1].start == 2.033333333
+
+
+@pytest.mark.parametrize("close", [False, True])
+def test_detection_progress_and_cancel(
+    controller, qtbot, scene_video, monkeypatch, tmp_path, close
+):
+    c = controller
+    c.paths = [scene_video]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 3), (3, 6)])
+    c.output = tmp_path / "previous-output.mp4"
+    c.output.write_bytes(b"previous export")
+    start = c.process.start
+
+    def realtime(program, arguments):
+        arguments.insert(arguments.index("-i"), "-re")
+        start(program, arguments)
+
+    monkeypatch.setattr(c.process, "start", realtime)
+    c.detect_segments(1, 0)
+    qtbot.waitUntil(lambda: c.progress.value() > 5, timeout=5000)
+    assert c.detecting
+    assert "0 cuts found" in c.progress_text.text()
+    assert "pts_time" not in c.log.toPlainText()
+    assert not c.pause.isEnabled()
+    assert not c.stop.isEnabled()
+    assert c.cancel.isEnabled()
+    c.preview.setChecked(not c.preview.isChecked())
+    assert not c.follow_timer.isActive()
+    if close:
+        c.window.close()
+    else:
+        c.cancel.click()
+    qtbot.waitUntil(lambda: not c.running, timeout=3000)
+    assert not c.detecting
+    assert c.output.read_bytes() == b"previous export"
+    assert [(s.start, s.end) for s in c.segments] == [(0, 3), (3, 6)]
+    assert c.progress_text.text() == "Scene detection canceled"
+
+
+def test_metadata_probe_keeps_event_loop_responsive(
+    controller, qtbot, source, monkeypatch
+):
+    c = controller
+    start = c.probe.start
+    ticks = []
+
+    def delayed_probe(program, arguments):
+        start(
+            sys.executable,
+            [
+                "-c",
+                'import time; time.sleep(0.4); print(\'{"streams":[{"width":320,"height":240}]}\')',
+            ],
+        )
+
+    monkeypatch.setattr(c.probe, "start", delayed_probe)
+    c.paths = [source]
+    c.load(0)
+    assert not c.ready
+    assert not c.open_button.isEnabled()
+    QTimer.singleShot(20, lambda: ticks.append(True))
+    qtbot.waitUntil(lambda: bool(ticks))
+    assert c.loading
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert not c.loading
+
+
+def test_gpu_probe_keeps_event_loop_responsive(controller, qtbot, source, monkeypatch):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.encoder.setCurrentIndex(c.encoder.findData("auto"))
+    c.compiled_encoders = "hevc_nvenc"
+    start = c.gpu_probe.start
+    selected = []
+    ticks = []
+
+    def delayed_probe(program, arguments):
+        start(
+            sys.executable,
+            ["-c", 'import time; time.sleep(0.4); print(\'[{"Name":"NVIDIA"}]\')'],
+        )
+
+    monkeypatch.setattr(c.gpu_probe, "start", delayed_probe)
+    monkeypatch.setattr(c, "export_with_encoder", selected.append)
+    c.export()
+    assert not c.export_button.isEnabled()
+    QTimer.singleShot(20, lambda: ticks.append(True))
+    qtbot.waitUntil(lambda: bool(ticks))
+    assert c.resolving_encoder
+    qtbot.waitUntil(lambda: bool(selected))
+    assert selected == ["hevc_nvenc"]
+    assert not c.resolving_encoder
 
 
 def test_numeric_lock_and_preset(controller, qtbot, source):
@@ -157,11 +377,16 @@ def test_position_edits_preserve_fractional_crop(controller, qtbot, source):
 
 
 @pytest.mark.parametrize("finish", ["stop", "cancel"])
-def test_pause_resume_and_interrupt(controller, qtbot, source, monkeypatch, finish):
+@pytest.mark.parametrize("segmented", [False, True])
+def test_pause_resume_and_interrupt(
+    controller, qtbot, source, monkeypatch, finish, segmented
+):
     c = controller
     c.paths = [source]
     c.load(0)
     qtbot.waitUntil(lambda: c.ready and c.end.value() == 8, timeout=15000)
+    if segmented:
+        c.replace_segments([(0, 4), (4, 8)])
     original = app.Export.arguments
     monkeypatch.setattr(app.Export, "arguments", lambda self: ["-re", *original(self)])
     c.export()
@@ -175,6 +400,7 @@ def test_pause_resume_and_interrupt(controller, qtbot, source, monkeypatch, fini
         c.cancel_export()
     qtbot.waitUntil(lambda: not c.running, timeout=15000)
     assert source not in c.done
+    assert c.export_index == 0
     if finish == "stop":
         assert c.progress_text.text() == "Stopped — output saved"
         assert c.output.exists()
@@ -348,14 +574,10 @@ def test_drop_on_video_viewport(controller, qtbot, source):
 
 
 @pytest.mark.parametrize("exit_code", [0, 1])
-@pytest.mark.parametrize("frozen", [False, True])
 @pytest.mark.parametrize("module", ["fastvideocropper", "fastvideocropper.installed"])
-def test_explorer_install_lifecycle(
-    controller, qtbot, monkeypatch, exit_code, frozen, module
-):
+def test_explorer_install_lifecycle(controller, qtbot, monkeypatch, exit_code, module):
     c = controller
     c.launcher_module = module
-    monkeypatch.setattr(sys, "frozen", frozen, raising=False)
     start = c.process.start
     launches = []
 
@@ -372,9 +594,7 @@ def test_explorer_install_lifecycle(
     monkeypatch.setattr(c.process, "start", launch)
     c.countdown("export", 30)
     c.install_button.click()
-    expected = ["--install-explorer"]
-    if not frozen:
-        expected = ["-I", "-m", module, *expected]
+    expected = ["-I", "-m", module, "--install-explorer"]
     assert launches == [(sys.executable, expected)]
     assert c.running and c.installing
     assert not c.count_timer.isActive()

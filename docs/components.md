@@ -13,6 +13,9 @@ to copy its custom controls or recovery logic.
 | Outside shading | Four QGraphicsRectItem instances | Stock scene items; no painter or input implementation |
 | View fitting and zoom | PyQtGraph ViewBox | Existing coordinate mapping, aspect-preserving scaling and range management |
 | Timeline | QSlider; PyQtGraph LinearRegionItem and InfLineLabel | Native scrubbing and existing labeled range indicators |
+| Segment selection | QListWidget and numbered LinearRegionItems | Native keyboard selection and clickable timeline regions |
+| Scene detection | QDialog, QDoubleSpinBox, QProcess; FFmpeg select/showinfo | Streaming progress and diagnostics, with cancellation through the existing process lifecycle |
+| Source and GPU discovery | QProcess | Asynchronous metadata and GPU queries keep the event loop responsive |
 | Precise geometry and time | QDoubleSpinBox | Native keyboard editing, locale, focus and accessibility |
 | Aspect presets | Checkable QPushButtons, QButtonGroup, QGridLayout | Twelve directly accessible presets with native selected/focus states |
 | Aspect locking | QCheckBox | Independent, keyboard-accessible lock/unlock toggle |
@@ -38,6 +41,8 @@ letterboxing against its unrotated native size.
 
 ## Sources
 
+- [LosslessCut segment workflow reference](https://github.com/mifi/lossless-cut)
+- [FFmpeg scene selection](https://ffmpeg.org/ffmpeg-filters.html#select_002c-aselect)
 - [Original application](https://github.com/electblake/VideoCropper)
 - [Qt QRubberBand](https://doc.qt.io/qt-6/qrubberband.html)
 - [Qt QGraphicsVideoItem](https://doc.qt.io/qtforpython-6/PySide6/QtMultimediaWidgets/QGraphicsVideoItem.html)
