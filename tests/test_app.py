@@ -171,7 +171,7 @@ def test_automatically_create_first_segment(
     assert restored.auto_segment.isChecked()
     restored.paths = [other]
     restored.load(0)
-    qtbot.waitUntil(lambda: restored.ready, timeout=15000)
+    qtbot.waitUntil(lambda: restored.ready and bool(restored.segments), timeout=15000)
     assert [(s.start, s.end) for s in restored.segments] == [(0, 8)]
     restored.clear_segments_button.click()
     restored.auto_segment.setChecked(False)
@@ -809,6 +809,71 @@ def test_numeric_lock_and_preset(controller, qtbot, source):
     c.fit()
 
 
+@pytest.mark.parametrize("advance", [False, True])
+@pytest.mark.parametrize("quit_done", [False, True])
+def test_final_export_unloads_video(controller, qtbot, source, advance, quit_done):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 0.5), (0.5, 1)])
+    c.advance.setChecked(advance)
+    c.quit_done.setChecked(quit_done)
+    c.quit_delay.setValue(30)
+    c.export_with_encoder("libx265")
+    qtbot.waitUntil(lambda: not c.running, timeout=30000)
+    assert source in c.done
+    assert c.output.exists()
+    assert c.progress_text.text() == "Complete — 2 segments saved"
+    assert c.player.source().isEmpty() == advance
+    assert c.ready == (not advance)
+    assert c.view.isVisible() == (not advance)
+    assert c.export_button.isEnabled() == (not advance)
+    assert c.count_timer.isActive() == quit_done
+    if quit_done:
+        assert c.count_action == "quit"
+        assert c.count_now.isEnabled()
+        c.count_cancelled()
+    if advance:
+        assert not c.paths
+        assert not c.segments
+        assert c.active_segment == -1
+        assert c.segment_list.count() == 0
+        assert not c.previous.isEnabled()
+        assert not c.next.isEnabled()
+        assert len(c.source_segments[source]) == 2
+        c.paths = [source]
+        c.load(0)
+        qtbot.waitUntil(lambda: c.ready, timeout=15000)
+        assert c.view.isVisible()
+        assert len(c.segments) == 2
+        assert c.export_button.isEnabled()
+
+
+@pytest.mark.parametrize(
+    "code,status",
+    [(1, app.QProcess.ExitStatus.NormalExit), (0, app.QProcess.ExitStatus.CrashExit)],
+)
+def test_failed_final_export_stays_loaded(
+    controller, qtbot, source, monkeypatch, code, status
+):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 1)])
+    c.advance.setChecked(True)
+    monkeypatch.setattr(c.process, "start", MagicMock())
+    c.export_with_encoder("libx265")
+    c.finished(code, status)
+    assert c.ready
+    assert not c.player.source().isEmpty()
+    assert c.view.isVisible()
+    assert c.paths == [source]
+    assert source not in c.done
+    assert c.export_button.isEnabled()
+
+
 def test_close_releases_video(controller, qtbot, source, tmp_path):
     import shutil
 
@@ -911,6 +976,7 @@ def test_pause_resume_and_interrupt(
     c.replace_segments([(0, 4), (4, 8)] if segmented else [(0, 8)])
     original = app.Export.arguments
     monkeypatch.setattr(app.Export, "arguments", lambda self: ["-re", *original(self)])
+    c.advance.setChecked(True)
     c.export()
     qtbot.waitUntil(lambda: c.processing_position > 0, timeout=15000)
     c.pause_export()
@@ -923,6 +989,9 @@ def test_pause_resume_and_interrupt(
     qtbot.waitUntil(lambda: not c.running, timeout=15000)
     assert source not in c.done
     assert c.export_index == 0
+    assert c.ready
+    assert not c.player.source().isEmpty()
+    assert c.paths == [source]
     if finish == "stop":
         assert c.progress_text.text() == "Stopped — output saved"
         assert c.output.exists()

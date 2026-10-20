@@ -1310,6 +1310,7 @@ class Application(QObject):
             self.lock.setChecked(self.settings.value("crop/locked", type=bool))
         self.ready = True
         self.loading = False
+        self.view.show()
         self.progress_text.setText("Ready")
         self.geometry_changed()
         self.set_aspect_lock()
@@ -1503,22 +1504,13 @@ class Application(QObject):
         )
 
     def set_aspect_lock(self):
-        for handle in list(self.roi.getHandles()):
-            self.roi.removeHandle(handle)
-        for pos in [
-            (0, 0),
-            (0.5, 0),
-            (1, 0),
-            (1, 0.5),
-            (1, 1),
-            (0.5, 1),
-            (0, 1),
-            (0, 0.5),
-        ]:
+        for handle in self.roi.handles:
+            pos = handle["pos"]
             center = [1 - pos[0], 1 - pos[1]]
             if self.lock.isChecked():
                 center = [0 if v == 0.5 else v for v in center]
-            self.roi.addScaleHandle(pos, center, lockAspect=self.lock.isChecked())
+            handle["center"] = pg.Point(center)
+            handle["lockAspect"] = self.lock.isChecked()
         self.save_segment()
 
     def set_preset(self, name):
@@ -1856,7 +1848,7 @@ class Application(QObject):
                 self.output.unlink()
                 self.output = None
                 self.progress_text.setText("Canceled — output deleted")
-        elif code != 0:
+        elif code != 0 or status != QProcess.ExitStatus.NormalExit:
             self.progress_text.setText(
                 f"FFmpeg exited with code {code} — see Process log"
             )
@@ -1899,8 +1891,24 @@ class Application(QObject):
             if self.advance.isChecked() and self.index + 1 < len(self.paths):
                 self.load(self.index + 1)
                 self.auto_export_pending = self.auto.isChecked()
-            elif self.quit_done.isChecked():
-                self.countdown("quit", self.quit_delay.value())
+            else:
+                if self.advance.isChecked():
+                    self.load_timer.stop()
+                    self.auto_export_pending = False
+                    self.save_segment()
+                    self.save_crop_settings()
+                    self.ready = False
+                    self.active_segment = -1
+                    self.segments = []
+                    self.refresh_segments()
+                    self.player.stop()
+                    self.player.setSource(QUrl())
+                    self.view.hide()
+                    self.paths = []
+                    self.index = 0
+                    self.title.setText("Open or drop videos to begin")
+                if self.quit_done.isChecked():
+                    self.countdown("quit", self.quit_delay.value())
         self.update_enabled()
 
     def countdown(self, action, seconds):
