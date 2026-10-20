@@ -134,7 +134,7 @@ class Application(QObject):
         self.update_dialog = UpdateDialog(self.window)
         self.update_dialog.busy_changed.connect(self.update_busy)
         self.update_dialog.install_requested.connect(self.install_update)
-        self.window.setWindowTitle("FastVideoCropper")
+        self.window.setWindowTitle(f"{APP_NAME} {APP_VERSION}")
         self.window.resize(1200, 800)
         self.window.setAcceptDrops(True)
         self.player = QMediaPlayer(self)
@@ -498,10 +498,29 @@ class Application(QObject):
                 "Positive expands both sides; negative insets both sides. "
                 "Expansion stops at the source edges."
             )
-            form.addRow(f"Padding {axis}", field)
+            row = QHBoxLayout()
+            row.addWidget(field, 1)
+            reset = self.button(
+                "Zero", lambda checked=False, field=field: field.setValue(0), row
+            )
+            reset.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+            reset.setAccessibleName(f"Reset padding {axis} to zero")
+            reset.setToolTip(f"Set padding {axis} to 0 px")
+            form.addRow(f"Padding {axis}", row)
             self.padding_fields.append(field)
             field.valueChanged.connect(self.geometry_changed)
             field.valueChanged.connect(self.geometry_finished)
+        padding_reset_row = QHBoxLayout()
+        self.button(
+            "Zero both",
+            lambda: (
+                self.padding_fields[0].setValue(0),
+                self.padding_fields[1].setValue(0),
+            ),
+            padding_reset_row,
+        ).setToolTip("Set padding X and Y to 0 px")
+        padding_reset_row.addStretch()
+        form.addRow("", padding_reset_row)
         rotation = QVBoxLayout()
         self.button("Rotate left", lambda: self.rotate(3), rotation)
         self.button("Rotate right", lambda: self.rotate(1), rotation)

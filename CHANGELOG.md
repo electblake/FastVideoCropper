@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added buttons to reset padding X, padding Y, or both to zero.
+
+### Changed
+
+- Displayed the application version in the window title.
+- Unloaded the final completed video when automatic advancement was enabled, while preserving saved segment settings.
+
+### Removed
+
+- Removed redundant padding help and aspect-ratio status text from crop controls.
+
+### Fixed
+
+- Preserved crop resize handles when changing aspect locks.
+- Kept failed and canceled exports loaded and treated crashed FFmpeg processes as failures.
+
 ## [0.4.0] - 2026-10-20
 
 ### Added
