@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-20
+
 ### Removed
 
 - Removed the redundant crop and segment summary above the video, giving its space to the preview.
