@@ -15,7 +15,8 @@ keyboard. No custom fonts, themes, or widget painting.
 - All twelve specified ratios as direct native buttons, independent aspect locking, center, full-frame reset,
   clockwise/counterclockwise rotation preserving geometry, selection zoom and
   optional pointer-centered wheel zoom.
-- Saved normalized geometry, ratio, center state, rotation and preferences.
+- Retained crop geometry, ratio, rotation, and aspect lock per video segment during the session.
+- Saved application and detection preferences through QSettings in the platformdirs user config directory.
 - HEVC export, copied audio, segment time intervals, numbered segment output alongside
   the source, overwrite, optional square-pixel normalization.
 - Explicit CPU, NVIDIA, Intel and AMD encoder selection when compiled into

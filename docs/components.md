@@ -20,7 +20,7 @@ to copy its custom controls or recovery logic.
 | Aspect presets | Checkable QPushButtons, QButtonGroup, QGridLayout | Twelve directly accessible presets with native selected/focus states |
 | Aspect locking | QCheckBox | Independent, keyboard-accessible lock/unlock toggle |
 | Process lifecycle | QProcess; psutil suspend/resume | Asynchronous pipes plus existing process control |
-| Preferences | QSettings | Native persistent storage |
+| Preferences | QSettings + platformdirs | INI storage in the user config directory; segment crops remain video-specific |
 | Progress and diagnostics | QProgressBar, QLabel, QPlainTextEdit, QFileDialog | Standard controls |
 
 Qt's QRubberBand draws a selection outline but does not provide a complete

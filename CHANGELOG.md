@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a Split segment menu action and button that split at the scrubber position in place, preserving crop settings and segment order.
 - Added FFmpeg scene detection with adjustable scene threshold and minimum segment length.
 - Added frame-step and decoder-thread controls for scene detection, persisted in QSettings.
 - Added live scene-detection progress showing percentage, video time scanned, cut count, and a completion summary.
@@ -17,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Stored application preferences in a QSettings INI file under the platformdirs user config directory, including mute and window layout.
+- Kept crop geometry, rotation, presets, and aspect locks specific to each video's segments.
+- Displayed current position and total duration separately as `HH:MM:SS` in the playback row.
 - Changed scene-threshold adjustments to increments of 0.01.
 - Saved scene-detection threshold and minimum segment length in QSettings.
 - Moved scene detection, video metadata probing, and GPU discovery onto Qt process signals.
@@ -29,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Repainted timeline selection immediately and kept the selected segment row distinct after focus changes.
+- Refreshed cached segment dimensions after loading each video's metadata.
 - Linked scrubber seeking to segment selection and crop settings without moving away from the chosen frame.
 - Displayed each segment's crop, rotation, aspect settings, and time range in the preview as the export queue advances.
 - Prevented queued video frames from marking a new source ready before metadata and duration loaded.

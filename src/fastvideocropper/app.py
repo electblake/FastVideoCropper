@@ -4,10 +4,12 @@ import json
 import os
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import psutil
 import pyqtgraph as pg
+from platformdirs import user_config_path
 from PySide6.QtCore import (
     QEvent,
     QObject,
@@ -86,13 +88,16 @@ class Application(QObject):
         self.ffmpeg = ffmpeg
         self.ffprobe = ffprobe
         self.launcher_module = launcher_module
-        self.settings = QSettings("FastVideoCropper", "FastVideoCropper")
+        self.settings = QSettings(
+            str(user_config_path(APP_NAME, appauthor=False) / "settings.ini"),
+            QSettings.Format.IniFormat,
+        )
         if folder is not None:
             self.settings.setValue("folder_path", folder)
         self.paths = []
         self.index = 0
         self.done = set()
-        self.turns = self.settings.value("turns", 0, int)
+        self.turns = 0
         self.width = self.height = 1.0
         self.pixel_width = self.pixel_height = 1.0
         self.ready = False
@@ -123,6 +128,8 @@ class Application(QObject):
         self.update_dialog.install_requested.connect(self.install_update)
         self.window.setWindowTitle("FastVideoCropper")
         self.window.resize(1200, 800)
+        if self.settings.contains("window_geometry"):
+            self.window.restoreGeometry(self.settings.value("window_geometry"))
         self.window.setAcceptDrops(True)
         self.player = QMediaPlayer(self)
         self.audio = QAudioOutput(self)
@@ -191,6 +198,9 @@ class Application(QObject):
         self.detect_action = segment_menu.addAction(
             "&Detect segments…", self.show_scene_detection
         )
+        self.split_segment_action = segment_menu.addAction(
+            "&Split segment", self.split_segment
+        )
         self.clear_segments_action = segment_menu.addAction(
             "&Clear segments", self.clear_segments
         )
@@ -248,7 +258,7 @@ class Application(QObject):
         self.title.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         header.addWidget(self.title, 1)
         layout.addLayout(header)
-        splitter = QSplitter()
+        splitter = self.splitter = QSplitter()
         layout.addWidget(splitter, 1)
         left = QWidget()
         left_layout = QVBoxLayout(left)
@@ -311,11 +321,20 @@ class Application(QObject):
         buttons = QHBoxLayout()
         self.play = self.button("Play", self.toggle_play, buttons)
         self.mute = QCheckBox("Mute")
+        self.mute.setChecked(self.settings.value("mute", False, bool))
+        self.audio.setMuted(self.mute.isChecked())
         self.mute.toggled.connect(self.audio.setMuted)
+        self.mute.toggled.connect(lambda value: self.settings.setValue("mute", value))
         buttons.addWidget(self.mute)
-        self.time = QLabel("0.000 / 0.000 s")
+        self.time = QLabel("00:00:00")
+        self.time.setAccessibleName("Current position")
+        self.time.setToolTip("Current position (hours:minutes:seconds)")
         buttons.addWidget(self.time)
         buttons.addStretch()
+        self.total_time = QLabel("00:00:00")
+        self.total_time.setAccessibleName("Video duration")
+        self.total_time.setToolTip("Video duration (hours:minutes:seconds)")
+        buttons.addWidget(self.total_time)
         playback.addLayout(buttons)
         left_layout.addWidget(self.transport)
         self.progress = QProgressBar()
@@ -349,7 +368,10 @@ class Application(QObject):
             "Clear segments", self.clear_segments, segment_buttons
         )
         right_layout.addLayout(segment_buttons)
-        tabs = QTabWidget()
+        self.split_segment_button = self.button(
+            "Split segment", self.split_segment, right_layout
+        )
+        tabs = self.tabs = QTabWidget()
         right_layout.addWidget(tabs, 1)
         self.crop_page = QWidget()
         form = QFormLayout(self.crop_page)
@@ -368,7 +390,8 @@ class Application(QObject):
         self.button("Rotate right", lambda: self.rotate(1), rotation)
         self.button("Reset rotation", lambda: self.rotate((-self.turns) % 4), rotation)
         form.addRow(rotation)
-        self.lock = self.preference("&Lock aspect ratio", "lock", False, form)
+        self.lock = QCheckBox("&Lock aspect ratio")
+        form.addRow(self.lock)
         self.lock.toggled.connect(self.set_aspect_lock)
         self.selected_preset = "Custom"
         self.preset_group = QButtonGroup(self)
@@ -503,6 +526,12 @@ class Application(QObject):
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([750, 420])
+        if self.settings.contains("splitter_state"):
+            splitter.restoreState(self.settings.value("splitter_state"))
+        tabs.setCurrentIndex(self.settings.value("active_tab", 0, int))
+        tabs.currentChanged.connect(
+            lambda value: self.settings.setValue("active_tab", value)
+        )
         self.window.statusBar().showMessage(
             "Source preview • exports replace matching numbered segment files"
         )
@@ -635,6 +664,37 @@ class Application(QObject):
         )
         self.update_enabled()
 
+    def split_segment(self):
+        self.count_cancelled()
+        self.player.pause()
+        self.save_segment()
+        position = self.player.position() / 1000
+        index = next(
+            i
+            for i, segment in enumerate(self.segments)
+            if segment.start < position < segment.end
+        )
+        segment = self.segments[index]
+        self.segments[index : index + 1] = [
+            replace(segment, end=position),
+            replace(segment, start=position),
+        ]
+        self.active_segment = -1
+        self.refresh_segments()
+        self.segment_list.setCurrentRow(index + 1)
+        self.segment_list.scrollToItem(self.segment_list.currentItem())
+        self.update_enabled()
+
+    def update_split_enabled(self):
+        position = self.player.position() / 1000
+        enabled = (
+            self.ready
+            and not (self.running or self.loading or self.resolving_encoder)
+            and any(segment.start < position < segment.end for segment in self.segments)
+        )
+        self.split_segment_action.setEnabled(enabled)
+        self.split_segment_button.setEnabled(enabled)
+
     def clear_segments(self):
         self.count_cancelled()
         self.active_segment = -1
@@ -733,9 +793,15 @@ class Application(QObject):
         self.lock.setChecked(segment.locked)
         self.active_segment = index
         for row, region in enumerate(self.segment_regions):
+            item = self.segment_list.item(row)
+            font = item.font()
+            font.setBold(row == index)
+            item.setFont(font)
             brush = self.window.palette().highlight().color()
             brush.setAlpha(130 if row == index else 60)
             region.setBrush(brush)
+            region.setHoverBrush(brush)
+            region.update()
         self.restoring_segment = False
         self.update_crop_summary()
         self.fit()
@@ -792,6 +858,9 @@ class Application(QObject):
         self.loading = True
         self.index = index
         self.player.stop()
+        self.turns = 0
+        self.lock.setChecked(False)
+        self.set_preset("Custom")
         self.player.setSource(QUrl())
         self.output = None
         self.progress.setValue(0)
@@ -820,6 +889,7 @@ class Application(QObject):
             for data in stream["side_data_list"]:
                 if "rotation" in data:
                     self.source_rotation = data["rotation"] // 90
+        self.refresh_segments()
         self.player.setSource(QUrl.fromLocalFile(str(self.paths[self.index])))
         self.title.setText(
             f"{self.index + 1}/{len(self.paths)} • {self.paths[self.index].name}"
@@ -838,20 +908,10 @@ class Application(QObject):
             self.width, self.height = self.height, self.width
         self.apply_rotation()
         self.roi.maxBounds = QRectF(0, 0, self.width, self.height)
-        saved = self.settings.value("geometry", [0.0, 0.0, 1.0, 1.0])
-        preset = self.settings.value("preset", "Custom")
-        centered = self.settings.value("centered", False, bool)
-        x, y, w, h = [float(v) for v in saved]
-        self.set_rect(
-            (x * self.width, y * self.height, w * self.width, h * self.height)
-        )
+        self.set_rect((0, 0, self.width, self.height))
         self.ready = True
         self.loading = False
         self.progress_text.setText("Ready")
-        self.set_preset(preset)
-        self.apply_preset()
-        if centered:
-            self.center()
         self.geometry_changed()
         self.set_aspect_lock()
         self.fit()
@@ -881,6 +941,10 @@ class Application(QObject):
             self.media_size(display_size)
 
     def duration_changed(self, duration):
+        seconds = duration // 1000
+        self.total_time.setText(
+            f"{seconds // 3600:02d}:{seconds // 60 % 60:02d}:{seconds % 60:02d}"
+        )
         self.seek.setRange(0, duration)
         self.position_changed(self.player.position())
         self.range_view.setXRange(0, duration / 1000, padding=0)
@@ -889,9 +953,11 @@ class Application(QObject):
         self.seek.blockSignals(True)
         self.seek.setValue(position)
         self.seek.blockSignals(False)
+        seconds = position // 1000
         self.time.setText(
-            f"{position / 1000:.3f} / {self.player.duration() / 1000:.3f} s"
+            f"{seconds // 3600:02d}:{seconds // 60 % 60:02d}:{seconds % 60:02d}"
         )
+        self.update_split_enabled()
 
     def seek_segment(self, position):
         for index, segment in enumerate(self.segments):
@@ -954,15 +1020,6 @@ class Application(QObject):
         ):
             mask.setRect(*rect)
         if self.ready:
-            self.settings.setValue(
-                "geometry",
-                [x / self.width, y / self.height, w / self.width, h / self.height],
-            )
-            self.settings.setValue(
-                "centered",
-                abs(x - (self.width - w) / 2) < 0.5
-                and abs(y - (self.height - h) / 2) < 0.5,
-            )
             selected = self.selected_preset
             if selected != "Custom":
                 ratio = (
@@ -972,7 +1029,6 @@ class Application(QObject):
                 )
                 if h and abs(w / h - ratio) > 0.001:
                     self.set_preset("Custom")
-            self.settings.setValue("preset", self.selected_preset)
             self.save_segment()
 
     def geometry_finished(self):
@@ -1052,7 +1108,6 @@ class Application(QObject):
         else:
             h = w / ratio
         self.set_rect((x, y, w, h))
-        self.settings.setValue("preset", name)
         self.geometry_finished()
 
     def center(self):
@@ -1077,8 +1132,6 @@ class Application(QObject):
         if steps % 2 and ":" in preset:
             preset = ":".join(reversed(preset.split(":")))
         self.set_preset(preset)
-        self.settings.setValue("preset", preset)
-        self.settings.setValue("turns", self.turns)
         self.save_segment()
         self.fit()
 
@@ -1394,6 +1447,7 @@ class Application(QObject):
         self.count_cancel.hide()
 
     def update_enabled(self):
+        self.update_split_enabled()
         self.update_crop_summary()
         busy = self.running or self.loading or self.resolving_encoder
         self.detect_action.setEnabled(self.ready and not busy)
@@ -1531,6 +1585,8 @@ class Application(QObject):
                 self.count_timer.stop()
                 self.player.stop()
                 self.player.setSource(QUrl())
+                self.settings.setValue("window_geometry", self.window.saveGeometry())
+                self.settings.setValue("splitter_state", self.splitter.saveState())
                 self.settings.sync()
         if watched is self.viewport:
             if event.type() == QEvent.Type.Resize:

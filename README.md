@@ -19,13 +19,20 @@ keyboard editing. Export requires segments. The source is never overwritten.
 
 Use **Segment → Detect segments…** (or the button above the crop controls) to
 split the video at scene changes. Adjust the scene threshold (lower detects more
-cuts) and minimum segment length in the dialog. These preferences are saved in
+cuts), minimum segment length, frame step, and decoder threads in the dialog. These preferences are saved in
 QSettings and restored when the dialog is reopened, including after restarting
 the app. Detection replaces existing segments and copies the current crop
 settings into each new segment.
 The progress display reports video time scanned and cuts found. **Cancel detection**
 stops the scan and retains the existing segments. FFmpeg diagnostics appear in
 the Process log.
+
+Application preferences use QSettings in `settings.ini` under platformdirs' user
+config directory (`%LOCALAPPDATA%\FastVideoCropper` on Windows). Detection options,
+mute, preview and zoom preferences, encoder/device, completion actions and delays,
+folder, window geometry, panel sizes, and selected tab are restored on startup.
+Crop geometry, rotation, preset, and aspect lock belong to each video's segments
+and are retained only during the session.
 
 Select a segment in the right-hand list or click its timeline region to edit its
 crop, rotation, aspect preset, and aspect lock independently.

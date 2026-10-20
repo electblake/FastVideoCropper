@@ -4,7 +4,7 @@ import threading
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QSettings, Qt, QThread
+from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import QApplication
 
 from fastvideocropper import app, installed, updates
@@ -12,8 +12,7 @@ from fastvideocropper import app, installed, updates
 
 @pytest.fixture
 def controller(qtbot, tmp_path, monkeypatch):
-    settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
-    monkeypatch.setattr(app, "QSettings", lambda *args: settings)
+    monkeypatch.setattr(app, "user_config_path", lambda *args, **kwargs: tmp_path)
     c = app.Application()
     qtbot.addWidget(c.window)
     c.window.show()

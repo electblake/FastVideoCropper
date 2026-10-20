@@ -1,21 +1,27 @@
 import json
 import subprocess
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import psutil
 import pytest
 from PySide6.QtCore import QMimeData, QPointF, QSettings, Qt, QTimer, QUrl
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
-from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QSpinBox
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QSpinBox,
+)
 
 from fastvideocropper import app
 
 
 @pytest.fixture
 def controller(qtbot, tmp_path, monkeypatch):
-    settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
-    monkeypatch.setattr(app, "QSettings", lambda *args: settings)
+    monkeypatch.setattr(app, "user_config_path", lambda *args, **kwargs: tmp_path)
     controller = app.Application()
     qtbot.addWidget(controller.window)
     controller.window.show()
@@ -716,9 +722,10 @@ def test_explorer_install_lifecycle(controller, qtbot, monkeypatch, exit_code, m
 
 
 def test_explorer_folder_startup(qtbot, tmp_path, monkeypatch):
-    settings = QSettings(str(tmp_path / "folder.ini"), QSettings.Format.IniFormat)
+    settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
     settings.setValue("folder_path", "previous folder")
-    monkeypatch.setattr(app, "QSettings", lambda *args: settings)
+    settings.sync()
+    monkeypatch.setattr(app, "user_config_path", lambda *args, **kwargs: tmp_path)
     folder = str(tmp_path / "Selected folder with spaces")
     c = app.Application(folder=folder)
     qtbot.addWidget(c.window)
@@ -741,3 +748,245 @@ def test_explorer_startup_argument(monkeypatch, tmp_path):
     monkeypatch.setattr(app, "Application", controller)
     assert app.main() == 0
     controller.assert_called_once_with(folder=folder)
+
+
+def test_preferences_restored_from_config_file(controller, qtbot, source, tmp_path):
+    c = controller
+    assert Path(c.settings.fileName()) == tmp_path / "settings.ini"
+    assert c.settings.format() == QSettings.Format.IniFormat
+    checkboxes = [
+        "mute",
+        "zoom",
+        "notify",
+        "preview",
+        "wheel",
+        "square",
+        "advance",
+        "auto",
+        "quit_done",
+    ]
+    expected = {}
+    for name in checkboxes:
+        control = getattr(c, name)
+        control.setChecked(not control.isChecked())
+        expected[name] = control.isChecked()
+    c.folder.setText(str(tmp_path))
+    c.encoder.setCurrentIndex(c.encoder.findData("auto"))
+    c.device.setValue(2)
+    c.auto_delay.setValue(12)
+    c.quit_delay.setValue(45)
+    c.tabs.setCurrentIndex(1)
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 8)])
+    c.rotate(1)
+    c.set_rect((10, 20, 100, 200))
+    c.lock.setChecked(True)
+
+    def configure_detection():
+        dialog = QApplication.activeModalWidget()
+        threshold, minimum = dialog.findChildren(QDoubleSpinBox)
+        step, threads = dialog.findChildren(QSpinBox)
+        threshold.setValue(0.12)
+        minimum.setValue(0.5)
+        step.setValue(3)
+        threads.setValue(2)
+        dialog.reject()
+
+    QTimer.singleShot(20, configure_detection)
+    c.detect_action.trigger()
+    c.window.close()
+    restored = app.Application()
+    qtbot.addWidget(restored.window)
+    restored.window.show()
+    for name, value in expected.items():
+        assert getattr(restored, name).isChecked() == value
+    assert restored.audio.isMuted() == expected["mute"]
+    assert restored.folder.text() == str(tmp_path)
+    assert restored.encoder.currentData() == "auto"
+    assert restored.device.value() == 2
+    assert restored.auto_delay.value() == 12
+    assert restored.quit_delay.value() == 45
+    assert restored.tabs.currentIndex() == 1
+    assert restored.settings.contains("window_geometry")
+    assert restored.settings.contains("splitter_state")
+    assert not {"geometry", "turns", "preset", "centered", "lock"}.intersection(
+        restored.settings.allKeys()
+    )
+    restored.paths = [source]
+    restored.load(0)
+    qtbot.waitUntil(lambda: restored.ready, timeout=15000)
+    assert restored.segments == []
+    assert restored.turns == 0
+    assert restored.rect() == (0, 0, 320, 240)
+    assert not restored.lock.isChecked()
+
+    def verify_detection():
+        dialog = QApplication.activeModalWidget()
+        threshold, minimum = dialog.findChildren(QDoubleSpinBox)
+        step, threads = dialog.findChildren(QSpinBox)
+        assert (threshold.value(), minimum.value(), step.value(), threads.value()) == (
+            0.12,
+            0.5,
+            3,
+            2,
+        )
+        dialog.reject()
+
+    QTimer.singleShot(20, verify_detection)
+    restored.detect_action.trigger()
+    restored.window.close()
+
+
+def test_crop_settings_stay_with_video(controller, qtbot, source, tmp_path):
+    import shutil
+
+    other = tmp_path / "other.mp4"
+    shutil.copyfile(source, other)
+    c = controller
+    c.paths = [source, other]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 8)])
+    c.rotate(1)
+    c.set_rect((10, 20, 100, 200))
+    c.lock.setChecked(True)
+    c.load(1)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert c.turns == 0
+    assert c.rect() == (0, 0, 320, 240)
+    assert not c.lock.isChecked()
+    c.replace_segments([(0, 8)])
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert c.turns == 1
+    assert c.rect() == (10, 20, 100, 200)
+    assert c.lock.isChecked()
+
+
+def test_segment_selection_remains_visible(controller, qtbot, source, tmp_path):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 2), (2, 8)])
+    for index in (1, 0):
+        item = c.segment_list.item(index)
+        qtbot.mouseClick(
+            c.segment_list.viewport(),
+            Qt.MouseButton.LeftButton,
+            pos=c.segment_list.visualItemRect(item).center(),
+        )
+        c.seek.setFocus()
+        assert c.active_segment == index
+        assert item.isSelected()
+        assert item.font().bold()
+        assert not c.segment_list.item(1 - index).font().bold()
+        selected = c.segment_regions[index]
+        other = c.segment_regions[1 - index]
+        assert selected.brush.color().alpha() > other.brush.color().alpha()
+        selected.setMouseHover(True)
+        assert selected.currentBrush == selected.brush
+        selected.setMouseHover(False)
+        qtbot.wait(50)
+        assert c.crop_summary.height() >= c.crop_summary.heightForWidth(
+            c.crop_summary.width()
+        )
+        c.window.grab().save(str(tmp_path / f"selection-{index}.png"))
+    c.running = True
+    c.update_enabled()
+    assert c.segment_list.currentItem().font().bold()
+    c.running = False
+    c.update_enabled()
+
+
+def test_cached_segment_dimensions_follow_source(controller, qtbot, source, tmp_path):
+    other = tmp_path / "small.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-i",
+            str(source),
+            "-vf",
+            "scale=160:120",
+            str(other),
+        ],
+        check=True,
+        capture_output=True,
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+    c = controller
+    c.paths = [source, other]
+    for index in (0, 1):
+        c.load(index)
+        qtbot.waitUntil(lambda: c.ready, timeout=15000)
+        c.replace_segments([(0, 2), (2, 8)])
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert "Crop 320 × 240" in c.segment_list.item(1).text()
+    c.load(1)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert "Crop 160 × 120" in c.segment_list.item(1).text()
+
+
+@pytest.mark.parametrize("trigger", ["menu", "button"])
+def test_split_segment_in_place(controller, qtbot, source, trigger):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert not c.split_segment_action.isEnabled()
+    c.replace_segments([(0, 2), (2, 6), (6, 8)])
+    c.segment_list.setCurrentRow(1)
+    c.rotate(1)
+    c.set_rect((10, 20, 100, 200))
+    c.lock.setChecked(True)
+    original = c.segments[1]
+    before, after = c.segments[0], c.segments[2]
+    assert not c.split_segment_action.isEnabled()
+    c.seek.setValue(4500)
+    assert c.split_segment_action.isEnabled()
+    assert c.split_segment_button.isEnabled()
+    if trigger == "menu":
+        c.split_segment_action.trigger()
+    else:
+        qtbot.mouseClick(c.split_segment_button, Qt.MouseButton.LeftButton)
+    assert [(s.start, s.end) for s in c.segments] == [
+        (0, 2),
+        (2, 4.5),
+        (4.5, 6),
+        (6, 8),
+    ]
+    assert c.segments[0] is before
+    assert c.segments[3] is after
+    for segment in c.segments[1:3]:
+        assert (segment.rect, segment.turns, segment.preset, segment.locked) == (
+            original.rect,
+            original.turns,
+            original.preset,
+            original.locked,
+        )
+    assert c.segment_list.currentRow() == c.active_segment == 2
+    assert c.player.position() == 4500
+    assert not c.split_segment_button.isEnabled()
+    assert len(c.segment_regions) == c.segment_list.count() == 4
+    c.set_rect((20, 30, 80, 160))
+    assert c.segments[1].rect == original.rect
+    assert c.segments[2].rect != original.rect
+    c.seek.setValue(5000)
+    c.running = True
+    c.update_enabled()
+    assert not c.split_segment_action.isEnabled()
+    c.running = False
+    c.update_enabled()
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert [(s.start, s.end) for s in c.segments] == [
+        (0, 2),
+        (2, 4.5),
+        (4.5, 6),
+        (6, 8),
+    ]
