@@ -1,15 +1,13 @@
 import io
 import json
-import runpy
 import threading
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QSettings, Qt, QThread
 from PySide6.QtWidgets import QApplication
 
-from fastvideocropper import app, updates
+from fastvideocropper import app, installed, updates
 
 
 @pytest.fixture
@@ -27,7 +25,8 @@ def controller(qtbot, tmp_path, monkeypatch):
     "latest,available",
     [("0.10.0", True), ("0.2.1", True), ("0.2.0", False), ("0.1.99", False)],
 )
-def test_versions(controller, latest, available):
+def test_versions(controller, latest, available, monkeypatch):
+    monkeypatch.setattr(updates, "APP_VERSION", "0.2.0")
     dialog = controller.update_dialog
     dialog.checked({"tag_name": f"v{latest}", "assets": []})
     assert dialog.available is available
@@ -202,11 +201,11 @@ def test_launch_after_event_loop(monkeypatch, tmp_path, install, packaged):
     monkeypatch.setattr(app.os, "startfile", launch)
     monkeypatch.setattr(app.sys, "argv", ["fastvideocropper"])
     if packaged:
-        with monkeypatch.context() as patch:
-            patch.setattr("PySide6.QtWidgets.QApplication", FakeApp)
-            with pytest.raises(SystemExit) as result:
-                runpy.run_path(str(Path(__file__).parents[1] / "packaging/launch.py"))
-        assert result.value.code == 7
+        monkeypatch.setattr(installed, "QApplication", FakeApp)
+        monkeypatch.setattr(
+            installed, "Application", lambda *a, **kw: SimpleNamespace(window=window)
+        )
+        assert installed.main() == 7
     else:
         assert app.main() == 7
     assert events == ["show", "exec"] + (["launch"] if install else [])

@@ -69,6 +69,19 @@ def test_numeric_lock_and_preset(controller, qtbot, source):
     c.fit()
 
 
+def test_close_releases_video(controller, qtbot, source, tmp_path):
+    import shutil
+
+    video = tmp_path / "close-test.mp4"
+    shutil.copyfile(source, video)
+    controller.paths = [video]
+    controller.load(0)
+    qtbot.waitUntil(lambda: controller.ready, timeout=15000)
+    controller.window.close()
+    assert controller.player.source().isEmpty()
+    video.rename(tmp_path / "released.mp4")
+
+
 def test_all_stock_handles_preserve_locked_ratio(controller, qtbot, source):
     c = controller
     c.paths = [source]
@@ -336,8 +349,12 @@ def test_drop_on_video_viewport(controller, qtbot, source):
 
 @pytest.mark.parametrize("exit_code", [0, 1])
 @pytest.mark.parametrize("frozen", [False, True])
-def test_explorer_install_lifecycle(controller, qtbot, monkeypatch, exit_code, frozen):
+@pytest.mark.parametrize("module", ["fastvideocropper", "fastvideocropper.installed"])
+def test_explorer_install_lifecycle(
+    controller, qtbot, monkeypatch, exit_code, frozen, module
+):
     c = controller
+    c.launcher_module = module
     monkeypatch.setattr(sys, "frozen", frozen, raising=False)
     start = c.process.start
     launches = []
@@ -357,7 +374,7 @@ def test_explorer_install_lifecycle(controller, qtbot, monkeypatch, exit_code, f
     c.install_button.click()
     expected = ["--install-explorer"]
     if not frozen:
-        expected = ["-I", "-m", "fastvideocropper", *expected]
+        expected = ["-I", "-m", module, *expected]
     assert launches == [(sys.executable, expected)]
     assert c.running and c.installing
     assert not c.count_timer.isActive()

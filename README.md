@@ -28,8 +28,8 @@ for the current user. No administrator access is needed; installing again
 overwrites the same entries. Explorer fills the Folder field without loading
 videos or starting an export. Open videos uses this folder as its starting location.
 Source installations use the current interpreter with `-I -m fastvideocropper`,
-so the package must remain installed in that interpreter. Packaged installations
-use the application executable and the bundled icon.
+so the package must remain installed in that interpreter. Setup installations
+use their private Python interpreter and the installed application icon.
 
 ```powershell
 uv run pytest
@@ -45,6 +45,8 @@ See [component decisions](docs/components.md) and [coverage](docs/coverage.md).
 
 ## Windows installer
 
-Release 0.2.0 includes a per-user Windows x64 Setup executable with Python, Qt,
-FFmpeg and FFprobe bundled. See [release build instructions](packaging/README.md)
+Release 0.3.0 provides a small per-user Windows x64 online Setup executable.
+It downloads uv, Python, the locked Qt/Python dependencies, FFmpeg and FFprobe.
+Installation requires Internet access; the installed app runs offline.
+See [release build instructions](packaging/README.md)
 and [changelog](CHANGELOG.md).

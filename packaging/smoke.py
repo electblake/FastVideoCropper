@@ -1,4 +1,4 @@
-"""Frozen verification executable; never included in the installer."""
+"""Verify playback and export using the environment created by Setup."""
 
 import json
 import subprocess
@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication
 
 from fastvideocropper import app as application
 
-tools = Path(__file__).resolve().parent / "tools/ffmpeg"
+tools = Path(sys.prefix).parents[1] / "tools/ffmpeg/ffmpeg-8.1.2-essentials_build/bin"
 ffmpeg, ffprobe = str(tools / "ffmpeg.exe"), str(tools / "ffprobe.exe")
 workspace = tempfile.TemporaryDirectory(prefix="FastVideoCropper-smoke-")
 source = Path(workspace.name) / "source.mp4"

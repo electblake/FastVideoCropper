@@ -1,0 +1,5 @@
+This online installer needs an Internet connection to download uv, Python 3.13.12, Qt/PySide6, the locked Python dependencies, and FFmpeg.
+
+Everything is installed privately below the selected application folder. No administrator privileges or preinstalled Python are required. Downloads require several hundred megabytes; the installed application is larger than this Setup file.
+
+After installation, playback and export work offline. The installer is unsigned.

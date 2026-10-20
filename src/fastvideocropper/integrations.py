@@ -15,7 +15,7 @@ CONTEXTS = (
 )
 
 
-def install():
+def install(module=APP_MODULE):
     import winreg
 
     executable = str(Path(sys.executable).resolve())
@@ -23,7 +23,7 @@ def install():
         launcher = [executable]
         icon_root = Path(sys._MEIPASS).resolve()
     else:
-        launcher = [executable, "-I", "-m", APP_MODULE]
+        launcher = [executable, "-I", "-m", module]
         icon_root = Path(__file__).resolve().parent
 
     icon = f'"{icon_root / ICON_NAME}"'

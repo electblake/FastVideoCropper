@@ -1,52 +1,47 @@
-# Windows release build
+# Windows online installer
 
-Version comes from `pyproject.toml`. The same value is written into the application
-EXE, Inno Setup metadata and installer filename. Stable upgrade identity:
-`electblake.FastVideoCropper`.
-
-Prerequisites: Windows x64, uv, Python 3.13.12, and Inno Setup 6.7.3.
-Supply the actual installed compiler path; the build never searches alternate
-compiler locations.
-
-From the repository root in PowerShell:
+Build requirements: Python 3.12+, uv, and Inno Setup 6.7.3. The compiler path is explicit:
 
 ```powershell
-$env:UV_PROJECT_ENVIRONMENT = ".build-venv"
-uv sync --locked --no-dev --group build --python 3.13.12
-.build-venv\Scripts\python.exe packaging\fetch_vendor.py
-.build-venv\Scripts\python.exe packaging\build.py --iscc "C:\Users\shoji\AppData\Local\Programs\Inno Setup 6\ISCC.exe"
+uv sync --locked
+.venv\Scripts\python.exe packaging\build.py --iscc "C:\Users\shoji\AppData\Local\Programs\Inno Setup 6\ISCC.exe"
 ```
 
-The build uses the pinned, checksum-verified Gyan FFmpeg 8.1.2 x64 essentials
-archive recorded in `vendor.json`. FFmpeg and FFprobe are private executables
-inside the application; no PATH edits, Python installation, package-manager
-bootstrap, or installer-time downloads occur.
+The installer embeds only application source, lock file, metadata, icon, and
+notices. Inno Setup downloads and verifies the SHA-256 of the pinned uv 0.13.4
+and FFmpeg 8.1.2 ZIP archives before extracting them using its native archive
+support. URLs, hashes and expanded sizes are in `uv.json` and `vendor.json`.
+uv downloads Python 3.13.12 into the application's private `python` directory,
+then installs the application and locked runtime packages into
+`application/.venv`. It does not register Python or change PATH. Developer
+packages are excluded. No Python, Qt or FFmpeg binaries are embedded in Setup.
 
-The installer is per-user and requires no administrator privileges. Start Menu
-and optional desktop shortcuts launch the installed application. QSettings data
-is stored outside the installation directory and is preserved on uninstall.
-Installers use the same AppId for upgrades.
+An Internet connection is required during installation; downloads total several
+hundred megabytes. Playback and export work offline afterward. This is a small
+online Setup executable, not a relocatable installed environment: virtual
+environments must remain at their installation path.
 
-Artifacts:
+The stable upgrade AppId is `electblake.FastVideoCropper`. Upgrading removes the
+old 0.2.0 frozen executable and `_internal` tree. Shortcuts use the installed
+`pythonw.exe` and `fastvideocropper.installed` module. Explorer registration uses
+the same module so private FFmpeg paths survive context-menu launches.
+Uninstall removes downloaded tools and the generated private Python environment;
+QSettings preferences remain outside the installation directory.
 
-- `dist/FastVideoCropper/`: portable application payload.
-- `dist/installer/FastVideoCropper-0.2.0-windows-amd64-Setup.exe`.
-- Adjacent `.exe.sha256`: installer SHA-256.
-- `dist/frozen-smoke.json`: relocated-bundle playback/crop/export verification.
+Inno's standard download and process logs record installation operations. The
+native Run section waits for uv and logs its output; no retry or recovery
+scripts are added. A successful Setup process alone is not proof that uv
+installed every dependency: verify the installed application before release.
 
-The separate frozen smoke executable is a build-only verification harness. It
-uses the same application source, dependencies, media tools and PyInstaller spec,
-but is excluded from Setup. It generates a video, decodes it with Qt Multimedia,
-rotates and crops a selected interval, exports HEVC/AAC, and verifies the output.
-Both freezing and verification use PATH restricted to Windows System32 and omit
-PYTHONPATH/PYTHONHOME, preventing unrelated developer DLLs from entering the
-bundle. Verification runs outside the source checkout.
+Outputs are `dist/installer/FastVideoCropper-<version>-windows-amd64-Setup.exe`
+and its `.exe.sha256` file. Generated outputs are excluded from Git.
 
-Generated binaries, vendor archives, environments and build intermediates are
-ignored by Git. Source, lock file, compiler recipe and input checksum manifest
-are committed. The installer is unsigned; no release has been published.
+To verify an installation, run its `application/.venv/Scripts/python.exe` with
+`-I packaging/smoke.py <absolute-report-path>`, using absolute paths to the smoke
+script and report. The smoke test generates media with the installed FFmpeg,
+decodes it with Qt Multimedia, crops/rotates/trims, exports HEVC with AAC audio,
+and probes the resulting dimensions and frame count. Restrict PATH to Windows
+System32 and remove PYTHONPATH/PYTHONHOME during this test.
 
-Clean-VM interactive/silent install, upgrade and uninstall validation must be
-completed before public distribution. The current host is not a disposable
-Windows test environment. Third-party notices are bundled; see `THIRD-PARTY.md`
-for source-redistribution requirements.
+The installer is unsigned. Host installation tests do not replace testing on a
+clean Windows VM. Release notes state the actual validation performed.

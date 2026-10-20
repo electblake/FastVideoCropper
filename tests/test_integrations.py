@@ -8,7 +8,8 @@ from fastvideocropper import integrations
 
 
 @pytest.mark.parametrize("frozen", [False, True])
-def test_install_commands_and_reinstall(monkeypatch, tmp_path, frozen):
+@pytest.mark.parametrize("module", ["fastvideocropper", "fastvideocropper.installed"])
+def test_install_commands_and_reinstall(monkeypatch, tmp_path, frozen, module):
     registry = MagicMock()
     values = {}
     registry.CreateKeyEx.side_effect = lambda hive, path, reserved, access: MagicMock(
@@ -24,13 +25,13 @@ def test_install_commands_and_reinstall(monkeypatch, tmp_path, frozen):
     monkeypatch.setattr(sys, "frozen", frozen, raising=False)
     monkeypatch.setattr(sys, "_MEIPASS", str(bundle), raising=False)
     for _ in range(2):
-        assert integrations.install() == 0
+        assert integrations.install(module) == 0
         assert len(values) == 9
         for root, target in integrations.CONTEXTS:
             key = rf"{root}\FastVideoCropper"
             launcher = f'"{executable.resolve()}"'
             if not frozen:
-                launcher += ' "-I" "-m" "fastvideocropper"'
+                launcher += f' "-I" "-m" "{module}"'
             assert values[key, ""] == "Open in FastVideoCropper"
             assert values[key + r"\command", ""] == f'{launcher} "{target}"'
             icon_root = bundle if frozen else Path(integrations.__file__).parent

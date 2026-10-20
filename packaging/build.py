@@ -1,12 +1,9 @@
-"""Build the locked, self-contained Windows release; supply the compiler path."""
+"""Compile the small online installer from pinned download manifests."""
 
 import argparse
 import hashlib
-import os
-import shutil
+import json
 import subprocess
-import sys
-import tempfile
 import tomllib
 from pathlib import Path
 
@@ -15,54 +12,17 @@ parser.add_argument("--iscc", type=Path, required=True)
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 version = tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"]
-environment = {
-    key: value
-    for key, value in os.environ.items()
-    if key not in ("PYTHONPATH", "PYTHONHOME")
-}
-# Resolve Windows libraries from the OS, never unrelated developer tool bundles.
-environment["PATH"] = str(Path(os.environ["SystemRoot"]) / "System32")
-subprocess.run(
-    [
-        sys.executable,
-        "-m",
-        "PyInstaller",
-        str(root / "packaging/FastVideoCropper.spec"),
-        "--noconfirm",
-        "--clean",
-    ],
-    cwd=root,
-    env=environment,
-    check=True,
-)
-subprocess.run(
-    [
-        sys.executable,
-        "-m",
-        "PyInstaller",
-        str(root / "packaging/FastVideoCropper.spec"),
-        "--noconfirm",
-        "--clean",
-        "--",
-        "--smoke",
-    ],
-    cwd=root,
-    env=environment,
-    check=True,
-)
-stage = (
-    Path(tempfile.mkdtemp(prefix=f"FastVideoCropper-verification-{version}-"))
-    / "bundle"
-)
-shutil.copytree(root / "dist/FastVideoCropperSmoke", stage)
-environment["PATH"] = str(Path(os.environ["SystemRoot"]) / "System32")
-subprocess.run(
-    [str(stage / "FastVideoCropperSmoke.exe"), str(root / "dist/frozen-smoke.json")],
-    cwd=stage,
-    env=environment,
-    check=True,
-    timeout=90,
-)
+(root / "build").mkdir(exist_ok=True)
+definitions = []
+for name, filename in (("Uv", "uv.json"), ("FFmpeg", "vendor.json")):
+    manifest = json.loads((root / "packaging" / filename).read_text())
+    for field, suffix in (
+        ("url", "Url"),
+        ("sha256", "Hash"),
+        ("extracted_size", "Size"),
+    ):
+        definitions.append(f'#define {name}{suffix} "{manifest[field]}"')
+(root / "build/downloads.iss").write_text("\n".join(definitions) + "\n")
 subprocess.run(
     [
         str(args.iscc),

@@ -73,10 +73,17 @@ RATIOS = {
 class Application(QObject):
     """Application controller; all visual components are stock or third-party."""
 
-    def __init__(self, ffmpeg="ffmpeg", ffprobe="ffprobe", folder=None):
+    def __init__(
+        self,
+        ffmpeg="ffmpeg",
+        ffprobe="ffprobe",
+        folder=None,
+        launcher_module=integrations.APP_MODULE,
+    ):
         super().__init__()
         self.ffmpeg = ffmpeg
         self.ffprobe = ffprobe
+        self.launcher_module = launcher_module
         self.settings = QSettings("FastVideoCropper", "FastVideoCropper")
         if folder is not None:
             self.settings.setValue("folder_path", folder)
@@ -853,7 +860,7 @@ class Application(QObject):
         self.update_enabled()
         arguments = ["--install-explorer"]
         if not getattr(sys, "frozen", False):
-            arguments = ["-I", "-m", integrations.APP_MODULE, *arguments]
+            arguments = ["-I", "-m", self.launcher_module, *arguments]
         self.process.start(str(Path(sys.executable).resolve()), arguments)
 
     def read_log(self):
@@ -1115,6 +1122,7 @@ class Application(QObject):
                         self.cancel_export()
                     self.process.waitForFinished(-1)
                 self.player.stop()
+                self.player.setSource(QUrl())
                 self.settings.sync()
         if watched is self.viewport:
             if event.type() == QEvent.Type.Resize:
