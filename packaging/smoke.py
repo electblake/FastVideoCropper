@@ -57,9 +57,10 @@ def step():
         started = True
         controller.export_with_encoder("libx265")
     elif started and not controller.running:
-        assert controller.progress_text.text() == "Complete — 1 segments saved", (
-            controller.log.toPlainText()
-        )
+        assert (
+            controller.window.statusBar().currentMessage()
+            == "Complete — 1 segments saved"
+        ), controller.log.toPlainText()
         streams = json.loads(
             subprocess.check_output(
                 [

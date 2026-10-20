@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-20
+
 ### Added
 
 - Added buttons to reset padding X, padding Y, or both to zero.
@@ -14,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Displayed the application version in the window title.
+- Moved processing, detection, loading, and completion messages into the bottom status bar.
 - Unloaded the final completed video when automatic advancement was enabled, while preserving saved segment settings.
 
 ### Removed

@@ -423,8 +423,7 @@ class Application(QObject):
         left_layout.addWidget(self.transport)
         self.progress = QProgressBar()
         left_layout.addWidget(self.progress)
-        self.progress_text = QLabel("Ready")
-        left_layout.addWidget(self.progress_text)
+        self.window.statusBar().showMessage("Ready")
         process_buttons = QHBoxLayout()
         self.pause = self.button("Pause", self.pause_export, process_buttons)
         self.stop = self.button("Stop and keep", self.stop_export, process_buttons)
@@ -911,7 +910,7 @@ class Application(QObject):
         self.progress_values = {}
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self.progress_text.setText("Detecting crop borders…")
+        self.window.statusBar().showMessage("Detecting crop borders…")
         self.log.clear()
         self.log.appendPlainText(
             subprocess.list2cmdline([self.ffmpeg, *self.crop_scan.arguments()])
@@ -960,7 +959,7 @@ class Application(QObject):
     def detection_progress(self, seconds, cuts):
         duration = self.player.duration() / 1000
         self.progress.setValue(min(99, int(seconds / duration * 100)))
-        self.progress_text.setText(
+        self.window.statusBar().showMessage(
             f"Detecting scenes • {self.progress.value()}% • "
             f"{seconds:.1f} / {duration:.1f} s scanned • {cuts} cuts found"
         )
@@ -986,7 +985,7 @@ class Application(QObject):
         self.refresh_segments()
         self.segment_list.setCurrentRow(0)
         self.progress.setValue(100)
-        self.progress_text.setText(
+        self.window.statusBar().showMessage(
             f"Scene detection complete — {len(self.segments)} segments"
         )
         self.update_enabled()
@@ -1056,7 +1055,7 @@ class Application(QObject):
         self.segments.clear()
         self.refresh_segments()
         self.progress.setValue(0)
-        self.progress_text.setText("Ready")
+        self.window.statusBar().showMessage("Ready")
         self.update_enabled()
 
     def segment_text(self, index):
@@ -1262,7 +1261,7 @@ class Application(QObject):
         self.player.setSource(QUrl())
         self.output = None
         self.progress.setValue(0)
-        self.progress_text.setText("Loading video…")
+        self.window.statusBar().showMessage("Loading video…")
         self.update_enabled()
         self.probe.start(
             self.ffprobe,
@@ -1330,7 +1329,7 @@ class Application(QObject):
         self.ready = True
         self.loading = False
         self.view.show()
-        self.progress_text.setText("Ready")
+        self.window.statusBar().showMessage("Ready")
         self.geometry_changed()
         self.set_aspect_lock()
         self.fit()
@@ -1623,7 +1622,7 @@ class Application(QObject):
         encoder = self.encoder.currentData()
         if encoder == "auto":
             self.resolving_encoder = True
-            self.progress_text.setText("Detecting GPU encoder…")
+            self.window.statusBar().showMessage("Detecting GPU encoder…")
             self.update_enabled()
             self.gpu_probe.start(
                 "powershell.exe",
@@ -1702,7 +1701,7 @@ class Application(QObject):
         self.processing_position = self.job.start
         self.seek_pending = False
         self.progress.setValue(0)
-        self.progress_text.setText(
+        self.window.statusBar().showMessage(
             f"Starting segment {self.export_index + 1}/{len(self.export_jobs)} • "
             f"{self.job.start:.3f} – {self.job.end:.3f} s"
         )
@@ -1718,7 +1717,7 @@ class Application(QObject):
         self.running = True
         self.installing = True
         self.install_status.setText("Installing…")
-        self.progress_text.setText("Installing in File Explorer…")
+        self.window.statusBar().showMessage("Installing in File Explorer…")
         self.update_enabled()
         arguments = ["-I", "-m", self.launcher_module, "--install-explorer"]
         self.process.start(str(Path(sys.executable).resolve()), arguments)
@@ -1750,7 +1749,7 @@ class Application(QObject):
                     duration = self.crop_scan.segment.end - self.crop_scan.segment.start
                     seconds = float(self.progress_values["out_time_us"]) / 1000000
                     self.progress.setValue(min(99, int(seconds / duration * 100)))
-                    self.progress_text.setText(
+                    self.window.statusBar().showMessage(
                         f"Detecting crop borders • {self.progress.value()}%"
                     )
                     continue
@@ -1772,7 +1771,7 @@ class Application(QObject):
                 eta = ""
                 if speed != "N/A" and float(speed.rstrip("x")) > 0:
                     eta = f" • ETA {(self.job.end - self.job.start - elapsed) / float(speed.rstrip('x')):.0f} s"
-                self.progress_text.setText(
+                self.window.statusBar().showMessage(
                     f"Processing segment {self.export_index + 1}/{len(self.export_jobs)} • "
                     f"{self.progress.value()}% • {self.progress_values['fps']} fps • {speed}{eta}"
                 )
@@ -1841,10 +1840,10 @@ class Application(QObject):
             self.running = False
             self.installing = False
             self.install_status.clear()
-            self.progress_text.setText("Ready")
+            self.window.statusBar().showMessage("Ready")
             if code == 0 and status == QProcess.ExitStatus.NormalExit:
                 self.install_status.setText("Installed in File Explorer")
-                self.progress_text.setText("Installed in File Explorer")
+                self.window.statusBar().showMessage("Installed in File Explorer")
             self.update_enabled()
             return
         self.read_log()
@@ -1858,7 +1857,7 @@ class Application(QObject):
         self.pause.setText("Pause")
         if self.outcome == "cancel":
             if detecting:
-                self.progress_text.setText(
+                self.window.statusBar().showMessage(
                     "Crop detection canceled"
                     if detecting_crop
                     else "Scene detection canceled"
@@ -1866,13 +1865,13 @@ class Application(QObject):
             else:
                 self.output.unlink()
                 self.output = None
-                self.progress_text.setText("Canceled — output deleted")
+                self.window.statusBar().showMessage("Canceled — output deleted")
         elif code != 0 or status != QProcess.ExitStatus.NormalExit:
-            self.progress_text.setText(
+            self.window.statusBar().showMessage(
                 f"FFmpeg exited with code {code} — see Process log"
             )
         elif self.outcome == "stop":
-            self.progress_text.setText("Stopped — output saved")
+            self.window.statusBar().showMessage("Stopped — output saved")
         elif detecting_crop:
             x, y, w, h = self.crop_scan.rect()
             self.set_preset("Custom")
@@ -1886,7 +1885,7 @@ class Application(QObject):
             )
             self.fit()
             self.progress.setValue(100)
-            self.progress_text.setText(
+            self.window.statusBar().showMessage(
                 "Crop detection complete — selected segment updated"
             )
         elif detecting:
@@ -1897,7 +1896,7 @@ class Application(QObject):
                 self.start_export_job()
                 return
             self.progress.setValue(100)
-            self.progress_text.setText(
+            self.window.statusBar().showMessage(
                 f"Complete — {len(self.export_jobs)} segments saved"
             )
             self.done.add(self.job.source)

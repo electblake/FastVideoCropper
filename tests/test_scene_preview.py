@@ -33,6 +33,6 @@ def test_scene_preview_follows_scan_and_respects_toggle(
     qtbot.waitUntil(lambda: c.player.position() > position, timeout=3000)
     c.cancel.click()
     qtbot.waitUntil(lambda: not c.running, timeout=3000)
-    assert c.progress_text.text() == "Scene detection canceled"
+    assert c.window.statusBar().currentMessage() == "Scene detection canceled"
     assert c.transport.isEnabled()
     c.window.close()

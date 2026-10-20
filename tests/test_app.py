@@ -71,7 +71,6 @@ def test_add_full_timeline_segment(controller, qtbot, source, trigger):
     assert c.rect() == (0, 0, 320, 240)
     assert c.crop_page.isEnabled() and c.export_button.isEnabled()
     assert status.currentMessage() == "Added segment covering the full timeline"
-    assert c.progress_text.text() == "Ready"
     c.set_rect((20, 30, 160, 120))
     c.seek_segment(3000)
     c.split_segment_action.trigger()
@@ -410,7 +409,7 @@ def test_load_crop_rotate_export(controller, qtbot, source, tmp_path):
     c.export()
     assert not c.next.isEnabled()
     qtbot.waitUntil(lambda: not c.running, timeout=30000)
-    assert c.progress_text.text() == "Complete — 1 segments saved"
+    assert c.window.statusBar().currentMessage() == "Complete — 1 segments saved"
     assert source in c.done
     assert c.output.exists()
     c.load(1)
@@ -434,7 +433,7 @@ def test_detect_select_clear_segments(
     assert not hasattr(c, "range_region")
     c.detection_progress(3, 1)
     assert c.progress.value() == 50
-    assert "3.0 / 6.0 s scanned • 1 cuts found" in c.progress_text.text()
+    assert "3.0 / 6.0 s scanned • 1 cuts found" in c.window.statusBar().currentMessage()
 
     def accept_detection():
         dialog = next(
@@ -457,7 +456,9 @@ def test_detect_select_clear_segments(
     assert not c.open_action.isEnabled()
     qtbot.waitUntil(lambda: not c.detecting, timeout=15000)
     assert c.progress.value() == 100
-    assert c.progress_text.text() == "Scene detection complete — 3 segments"
+    assert (
+        c.window.statusBar().currentMessage() == "Scene detection complete — 3 segments"
+    )
     assert [(s.start, s.end) for s in c.segments] == [(0, 2), (2, 4), (4, 6)]
     assert c.segment_list.count() == 3
     assert c.scene_scan.framestep == 2
@@ -563,7 +564,7 @@ def test_export_segments_with_independent_crops(controller, qtbot, source, previ
     c.export()
     assert not c.clear_segments_action.isEnabled()
     qtbot.waitUntil(lambda: not c.running, timeout=30000)
-    assert c.progress_text.text() == "Complete — 2 segments saved"
+    assert c.window.statusBar().currentMessage() == "Complete — 2 segments saved"
     assert source in c.done
     assert len(observed) == 2
     for index, (row, rect, turns, locked, summary, size, playing) in enumerate(
@@ -667,7 +668,7 @@ def test_detection_progress_and_cancel(
     c.detect_segments(1, 0, framestep=30, threads=1)
     qtbot.waitUntil(lambda: c.progress.value() > 5, timeout=5000)
     assert c.detecting
-    assert "0 cuts found" in c.progress_text.text()
+    assert "0 cuts found" in c.window.statusBar().currentMessage()
     assert "pts_time" not in c.log.toPlainText()
     assert not c.pause.isEnabled()
     assert not c.stop.isEnabled()
@@ -682,7 +683,7 @@ def test_detection_progress_and_cancel(
     assert not c.detecting
     assert c.output.read_bytes() == b"previous export"
     assert c.segments == []
-    assert c.progress_text.text() == "Scene detection canceled"
+    assert c.window.statusBar().currentMessage() == "Scene detection canceled"
 
 
 def test_metadata_probe_keeps_event_loop_responsive(
@@ -824,7 +825,7 @@ def test_final_export_unloads_video(controller, qtbot, source, advance, quit_don
     qtbot.waitUntil(lambda: not c.running, timeout=30000)
     assert source in c.done
     assert c.output.exists()
-    assert c.progress_text.text() == "Complete — 2 segments saved"
+    assert c.window.statusBar().currentMessage() == "Complete — 2 segments saved"
     assert c.player.source().isEmpty() == advance
     assert c.ready == (not advance)
     assert c.view.isVisible() == (not advance)
@@ -979,6 +980,8 @@ def test_pause_resume_and_interrupt(
     c.advance.setChecked(True)
     c.export()
     qtbot.waitUntil(lambda: c.processing_position > 0, timeout=15000)
+    assert c.window.statusBar().currentMessage().startswith("Processing segment 1/")
+    assert "fps" in c.window.statusBar().currentMessage()
     c.pause_export()
     processes = [psutil.Process(c.process.processId()), *c.suspended_children]
     assert all(p.status() == psutil.STATUS_STOPPED for p in processes)
@@ -993,7 +996,7 @@ def test_pause_resume_and_interrupt(
     assert not c.player.source().isEmpty()
     assert c.paths == [source]
     if finish == "stop":
-        assert c.progress_text.text() == "Stopped — output saved"
+        assert c.window.statusBar().currentMessage() == "Stopped — output saved"
         assert c.output.exists()
         result = json.loads(
             subprocess.check_output(
@@ -1011,7 +1014,7 @@ def test_pause_resume_and_interrupt(
         )
         assert 0 < float(result["format"]["duration"]) < 8
     else:
-        assert c.progress_text.text() == "Canceled — output deleted"
+        assert c.window.statusBar().currentMessage() == "Canceled — output deleted"
         assert not c.job.output.exists()
 
 
@@ -1079,7 +1082,7 @@ def test_auto_advance_and_countdown(controller, qtbot, source):
     c.countdown("export", 1)
     qtbot.waitUntil(lambda: c.running, timeout=5000)
     qtbot.waitUntil(lambda: not c.running, timeout=15000)
-    assert c.progress_text.text() == "Complete — 1 segments saved"
+    assert c.window.statusBar().currentMessage() == "Complete — 1 segments saved"
 
 
 @pytest.mark.parametrize(
@@ -1128,7 +1131,7 @@ def test_anamorphic_view_maps_to_source_pixels(
     c.export()
     assert c.job.rect == rect
     qtbot.waitUntil(lambda: not c.running, timeout=15000)
-    assert c.progress_text.text() == "Complete — 1 segments saved"
+    assert c.window.statusBar().currentMessage() == "Complete — 1 segments saved"
     result = json.loads(
         subprocess.check_output(
             [
@@ -1183,7 +1186,7 @@ def test_embedded_rotation_coordinates(controller, qtbot, source, tmp_path):
     c.replace_segments([(0, 1)])
     c.export()
     qtbot.waitUntil(lambda: not c.running, timeout=15000)
-    assert c.progress_text.text() == "Complete — 1 segments saved"
+    assert c.window.statusBar().currentMessage() == "Complete — 1 segments saved"
 
 
 def test_drop_on_video_viewport(controller, qtbot, source):
@@ -1667,7 +1670,8 @@ def test_detect_crop_selected_segment(controller, qtbot, tmp_path, trigger, turn
     assert not c.segment_list.isEnabled()
     qtbot.waitUntil(lambda: not c.running, timeout=15000)
     assert (
-        c.progress_text.text() == "Crop detection complete — selected segment updated"
+        c.window.statusBar().currentMessage()
+        == "Crop detection complete — selected segment updated"
     )
     assert c.rect() == ((40, 20, 240, 200) if turns == 0 else (20, 80, 200, 480))
     assert c.segments[0].rect == original
@@ -1698,7 +1702,7 @@ def test_cancel_crop_detection(controller, qtbot, source, monkeypatch):
     c.cancel_export()
     qtbot.waitUntil(lambda: not c.running, timeout=15000)
     assert c.rect() == original
-    assert c.progress_text.text() == "Crop detection canceled"
+    assert c.window.statusBar().currentMessage() == "Crop detection canceled"
     assert c.detect_crop_action.isEnabled()
 
 
