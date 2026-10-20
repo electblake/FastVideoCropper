@@ -806,7 +806,14 @@ def test_numeric_lock_and_preset(controller, qtbot, source):
 
 @pytest.mark.parametrize("advance", [False, True])
 @pytest.mark.parametrize("quit_done", [False, True])
-def test_final_export_unloads_video(controller, qtbot, source, advance, quit_done):
+def test_final_export_unloads_video(
+    controller, qtbot, source, tmp_path, advance, quit_done
+):
+    import shutil
+
+    video = tmp_path / "export-test.mp4"
+    shutil.copyfile(source, video)
+    source = video
     c = controller
     c.paths = [source]
     c.load(0)
@@ -830,6 +837,10 @@ def test_final_export_unloads_video(controller, qtbot, source, advance, quit_don
         assert c.count_now.isEnabled()
         c.count_cancelled()
     if advance:
+        assert not c.video.videoSink().videoFrame().isValid()
+        assert source.resolve() not in {
+            Path(file.path).resolve() for file in psutil.Process().open_files()
+        }
         assert not c.paths
         assert not c.segments
         assert c.active_segment == -1
@@ -837,6 +848,8 @@ def test_final_export_unloads_video(controller, qtbot, source, advance, quit_don
         assert not c.previous.isEnabled()
         assert not c.next.isEnabled()
         assert len(c.source_segments[source]) == 2
+        renamed = source.rename(tmp_path / "released.mp4")
+        renamed.rename(source)
         c.paths = [source]
         c.load(0)
         qtbot.waitUntil(lambda: c.ready, timeout=15000)
@@ -869,7 +882,8 @@ def test_failed_final_export_stays_loaded(
     assert c.export_button.isEnabled()
 
 
-def test_close_releases_video(controller, qtbot, source, tmp_path):
+@pytest.mark.parametrize("playing", [False, True])
+def test_close_releases_video(controller, qtbot, source, tmp_path, playing):
     import shutil
 
     video = tmp_path / "close-test.mp4"
@@ -877,9 +891,46 @@ def test_close_releases_video(controller, qtbot, source, tmp_path):
     controller.paths = [video]
     controller.load(0)
     qtbot.waitUntil(lambda: controller.ready, timeout=15000)
+    if playing:
+        controller.player.play()
+        qtbot.waitUntil(lambda: controller.player.position() > 0, timeout=15000)
     controller.window.close()
     assert controller.player.source().isEmpty()
+    assert not controller.video.videoSink().videoFrame().isValid()
+    assert video.resolve() not in {
+        Path(file.path).resolve() for file in psutil.Process().open_files()
+    }
     video.rename(tmp_path / "released.mp4")
+
+
+@pytest.mark.parametrize("playing", [False, True])
+def test_switch_releases_previous_video(controller, qtbot, source, tmp_path, playing):
+    import shutil
+
+    video = tmp_path / "switch-test.mp4"
+    shutil.copyfile(source, video)
+    c = controller
+    c.paths = [video, source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 1)])
+    c.set_rect((20, 30, 160, 120))
+    if playing:
+        c.player.play()
+        qtbot.waitUntil(lambda: c.player.position() > 0, timeout=15000)
+    c.load(1)
+    assert not c.video.videoSink().videoFrame().isValid()
+    assert video.resolve() not in {
+        Path(file.path).resolve() for file in psutil.Process().open_files()
+    }
+    renamed = video.rename(tmp_path / "released.mp4")
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert c.player.source().toLocalFile() == str(source).replace("\\", "/")
+    renamed.rename(video)
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert c.rect() == (20, 30, 160, 120)
+    assert len(c.segments) == 1
 
 
 def test_all_stock_handles_preserve_locked_ratio(controller, qtbot, source):

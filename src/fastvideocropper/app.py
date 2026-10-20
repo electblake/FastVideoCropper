@@ -21,7 +21,7 @@ from PySide6.QtCore import (
     QUrl,
 )
 from PySide6.QtGui import QAction, QDesktopServices, QKeySequence, QPen, QTransform
-from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoFrame
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import (
     QApplication,
@@ -1221,6 +1221,7 @@ class Application(QObject):
             field.blockSignals(False)
         self.set_preset("Custom")
         self.player.setSource(QUrl())
+        self.video.videoSink().setVideoFrame(QVideoFrame())
         self.output = None
         self.progress.setValue(0)
         self.window.statusBar().showMessage("Loading video…")
@@ -1883,6 +1884,7 @@ class Application(QObject):
                     self.refresh_segments()
                     self.player.stop()
                     self.player.setSource(QUrl())
+                    self.video.videoSink().setVideoFrame(QVideoFrame())
                     self.view.hide()
                     self.paths = []
                     self.index = 0
@@ -2077,6 +2079,7 @@ class Application(QObject):
                     self.save_crop_settings()
                 self.player.stop()
                 self.player.setSource(QUrl())
+                self.video.videoSink().setVideoFrame(QVideoFrame())
                 self.settings.setValue(
                     "mainWindow/geometry", self.window.saveGeometry()
                 )

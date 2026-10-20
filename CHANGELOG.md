@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Explicitly released displayed video frames when unloading completed videos, switching files, and closing the application.
+
 ## [0.5.1] - 2026-10-20
 
 ### Removed
