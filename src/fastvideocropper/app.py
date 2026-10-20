@@ -983,11 +983,14 @@ class Application(QObject):
         self.update_enabled()
 
     def update_split_enabled(self):
-        position = self.player.position() / 1000
+        position = self.player.position()
         enabled = (
             self.ready
             and not (self.running or self.loading or self.resolving_encoder)
-            and any(segment.start < position < segment.end for segment in self.segments)
+            and any(
+                round(segment.start * 1000) < position < round(segment.end * 1000)
+                for segment in self.segments
+            )
         )
         self.split_segment_action.setEnabled(enabled)
         self.split_segment_button.setEnabled(enabled)
@@ -1240,10 +1243,10 @@ class Application(QObject):
         self.geometry_changed()
         self.set_aspect_lock()
         self.fit()
-        self.update_enabled()
 
         if self.segments:
             self.segment_list.setCurrentRow(0)
+        self.update_enabled()
 
     def frame_changed(self, frame):
         self.seek_pending = False
@@ -1287,19 +1290,23 @@ class Application(QObject):
         self.update_navigation()
 
     def update_navigation(self):
-        position = self.player.position() / 1000
-        index = sum(segment.start <= position for segment in self.segments) - 1
+        position = self.player.position()
+        index = (
+            sum(round(segment.start * 1000) <= position for segment in self.segments) - 1
+        )
         self.navigation_buttons["previous"].setEnabled(index > 0)
         self.navigation_buttons["next"].setEnabled(index + 1 < len(self.segments))
 
     def jump_segment(self, direction):
-        position = self.player.position() / 1000
-        index = sum(segment.start <= position for segment in self.segments) - 1
+        position = self.player.position()
+        index = (
+            sum(round(segment.start * 1000) <= position for segment in self.segments) - 1
+        )
         self.seek_segment(round(self.segments[index + direction].start * 1000))
 
     def seek_segment(self, position):
         for index, segment in enumerate(self.segments):
-            if segment.start <= position / 1000 < segment.end or (
+            if round(segment.start * 1000) <= position < round(segment.end * 1000) or (
                 position == self.player.duration() == round(segment.end * 1000)
             ):
                 if index != self.active_segment:

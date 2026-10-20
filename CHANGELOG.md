@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Restored crop detection controls after returning to videos with saved segments.
+- Matched segment navigation, scrubber selection, and split controls to rounded player timestamps at fractional-millisecond boundaries.
 - Reset pixel padding for newly opened videos while restoring saved segment padding when returning to a video.
 - Refitted zoomed previews after padding edits and preserved unpadded export rounding.
 - Repainted timeline selection immediately and kept the selected segment row distinct after focus changes.

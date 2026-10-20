@@ -1102,6 +1102,44 @@ def test_split_segment_in_place(controller, qtbot, source, trigger):
     ]
 
 
+def test_crop_detection_enabled_on_cached_video(controller, qtbot, source):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 8)])
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert c.active_segment == 0
+    assert c.detect_crop_action.isEnabled()
+    assert c.detect_crop_button.isEnabled()
+
+
+def test_navigation_fractional_millisecond_boundaries(controller, qtbot, source):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 2.333333), (2.333333, 5.666667), (5.666667, 8)])
+    for name, position, segment in [
+        ("next", 2333, 1),
+        ("next", 5667, 2),
+        ("previous", 2333, 1),
+        ("previous", 0, 0),
+    ]:
+        c.navigation_buttons[name].click()
+        assert c.player.position() == position
+        assert c.active_segment == segment
+        assert not c.split_segment_action.isEnabled()
+        assert not c.split_segment_button.isEnabled()
+    c.segment_list.setCurrentRow(1)
+    assert c.navigation_buttons["previous"].isEnabled()
+    c.seek_segment(2332)
+    assert c.active_segment == 0
+    c.seek_segment(2333)
+    assert c.active_segment == 1
+
+
 def test_player_navigation_controls(controller, qtbot, source):
     c = controller
     assert all(not b.isEnabled() for b in c.navigation_buttons.values())
