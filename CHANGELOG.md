@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Advanced the video preview with scene-detection progress when Preview while processing was enabled.
 - Saved window geometry, dock placement, floating state, visibility, and splitter sizes under the `mainWindow` QSettings group.
 - Stored application preferences in a QSettings INI file under the platformdirs user config directory, including mute and window layout.
 - Kept crop geometry, rotation, presets, and aspect locks specific to each video's segments.

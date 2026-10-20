@@ -663,6 +663,8 @@ class Application(QObject):
             f"Detecting scenes • {self.progress.value()}% • "
             f"{seconds:.1f} / {duration:.1f} s scanned • {cuts} cuts found"
         )
+        if self.preview.isChecked():
+            self.player.setPosition(round(seconds * 1000))
 
     def replace_segments(self, ranges):
         x, y, w, h = self.rect()
