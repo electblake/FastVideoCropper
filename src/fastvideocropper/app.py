@@ -502,13 +502,6 @@ class Application(QObject):
             self.padding_fields.append(field)
             field.valueChanged.connect(self.geometry_changed)
             field.valueChanged.connect(self.geometry_finished)
-        padding_help = QLabel(
-            "Per side: + expands, − insets.\n"
-            "Dashed outline = output crop.\n"
-            "Expansion stops at source edges."
-        )
-        padding_help.setWordWrap(True)
-        form.addRow(padding_help)
         rotation = QVBoxLayout()
         self.button("Rotate left", lambda: self.rotate(3), rotation)
         self.button("Rotate right", lambda: self.rotate(1), rotation)
@@ -530,8 +523,6 @@ class Application(QObject):
             presets.addWidget(button, index // 4, index % 4)
         self.preset_group.buttonClicked.connect(self.choose_preset)
         form.addRow(presets)
-        self.preset_status = QLabel("Aspect ratio: Custom")
-        form.addRow(self.preset_status)
         for divisions, positions in [
             (3, ["Left", "Center", "Right"]),
             (2, ["Left", "Right"]),
@@ -1536,7 +1527,6 @@ class Application(QObject):
         for label, button in self.preset_buttons.items():
             button.setChecked(label == name)
         self.preset_group.setExclusive(True)
-        self.preset_status.setText(f"Aspect ratio: {name}")
 
     def choose_preset(self, button):
         self.set_preset(button.text())
