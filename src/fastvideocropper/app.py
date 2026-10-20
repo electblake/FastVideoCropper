@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QDockWidget,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
@@ -128,8 +129,6 @@ class Application(QObject):
         self.update_dialog.install_requested.connect(self.install_update)
         self.window.setWindowTitle("FastVideoCropper")
         self.window.resize(1200, 800)
-        if self.settings.contains("window_geometry"):
-            self.window.restoreGeometry(self.settings.value("window_geometry"))
         self.window.setAcceptDrops(True)
         self.player = QMediaPlayer(self)
         self.audio = QAudioOutput(self)
@@ -153,6 +152,12 @@ class Application(QObject):
             lambda _, text: self.log.appendPlainText(text)
         )
         self.build_ui()
+        if self.settings.contains("mainWindow/geometry"):
+            self.window.restoreGeometry(self.settings.value("mainWindow/geometry"))
+        if self.settings.contains("mainWindow/state"):
+            self.window.restoreState(self.settings.value("mainWindow/state"), 1)
+        if self.settings.contains("mainWindow/splitterState"):
+            self.splitter.restoreState(self.settings.value("mainWindow/splitterState"))
         self.player.durationChanged.connect(self.duration_changed)
         self.player.positionChanged.connect(self.position_changed)
         self.player.playbackStateChanged.connect(self.playback_changed)
@@ -204,6 +209,7 @@ class Application(QObject):
         self.clear_segments_action = segment_menu.addAction(
             "&Clear segments", self.clear_segments
         )
+        view_menu = self.window.menuBar().addMenu("&View")
         help_menu = self.window.menuBar().addMenu("&Help")
         self.check_update_action = help_menu.addAction(
             "Check for Updates", self.check_updates
@@ -352,14 +358,26 @@ class Application(QObject):
         splitter.addWidget(left)
         right = QWidget()
         right_layout = QVBoxLayout(right)
-        right_layout.addWidget(QLabel("Segments"))
+        self.segments_dock = QDockWidget("Segments", self.window)
+        self.segments_dock.setObjectName("segmentsDock")
+        segments = QWidget()
+        segments_layout = QVBoxLayout(segments)
+        self.segments_dock.setWidget(segments)
+        self.window.addDockWidget(
+            Qt.DockWidgetArea.RightDockWidgetArea, self.segments_dock
+        )
+        view_menu.addAction(self.segments_dock.toggleViewAction())
+        view_menu.addSeparator()
+        self.reset_layout_action = view_menu.addAction(
+            "&Reset Layout", self.reset_layout
+        )
         self.segment_list = QListWidget()
         self.segment_list.setAccessibleName("Video segments")
         self.segment_list.currentRowChanged.connect(self.select_segment)
-        right_layout.addWidget(self.segment_list, 1)
+        segments_layout.addWidget(self.segment_list, 1)
         self.segment_summary = QLabel("No segments — detect scenes to begin")
         self.segment_summary.setWordWrap(True)
-        right_layout.addWidget(self.segment_summary)
+        segments_layout.addWidget(self.segment_summary)
         segment_buttons = QHBoxLayout()
         self.detect_button = self.button(
             "Detect segments…", self.show_scene_detection, segment_buttons
@@ -367,9 +385,9 @@ class Application(QObject):
         self.clear_segments_button = self.button(
             "Clear segments", self.clear_segments, segment_buttons
         )
-        right_layout.addLayout(segment_buttons)
+        segments_layout.addLayout(segment_buttons)
         self.split_segment_button = self.button(
-            "Split segment", self.split_segment, right_layout
+            "Split segment", self.split_segment, segments_layout
         )
         tabs = self.tabs = QTabWidget()
         right_layout.addWidget(tabs, 1)
@@ -526,8 +544,9 @@ class Application(QObject):
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([750, 420])
-        if self.settings.contains("splitter_state"):
-            splitter.restoreState(self.settings.value("splitter_state"))
+        self.window.resizeDocks([self.segments_dock], [320], Qt.Orientation.Horizontal)
+        self.default_window_state = self.window.saveState(1)
+        self.default_splitter_state = splitter.saveState()
         tabs.setCurrentIndex(self.settings.value("active_tab", 0, int))
         tabs.currentChanged.connect(
             lambda value: self.settings.setValue("active_tab", value)
@@ -535,6 +554,10 @@ class Application(QObject):
         self.window.statusBar().showMessage(
             "Source preview • exports replace matching numbered segment files"
         )
+
+    def reset_layout(self):
+        self.window.restoreState(self.default_window_state, 1)
+        self.splitter.restoreState(self.default_splitter_state)
 
     def show_scene_detection(self):
         self.count_cancelled()
@@ -1585,8 +1608,13 @@ class Application(QObject):
                 self.count_timer.stop()
                 self.player.stop()
                 self.player.setSource(QUrl())
-                self.settings.setValue("window_geometry", self.window.saveGeometry())
-                self.settings.setValue("splitter_state", self.splitter.saveState())
+                self.settings.setValue(
+                    "mainWindow/geometry", self.window.saveGeometry()
+                )
+                self.settings.setValue("mainWindow/state", self.window.saveState(1))
+                self.settings.setValue(
+                    "mainWindow/splitterState", self.splitter.saveState()
+                )
                 self.settings.sync()
         if watched is self.viewport:
             if event.type() == QEvent.Type.Resize:

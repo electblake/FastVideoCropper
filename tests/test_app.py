@@ -58,8 +58,12 @@ def test_load_crop_rotate_export(controller, qtbot, source, tmp_path):
     assert c.rect() == (100, 60, 120, 120)
 
 
-def test_detect_select_clear_segments(controller, qtbot, scene_video, tmp_path):
+@pytest.mark.parametrize("floating", [False, True])
+def test_detect_select_clear_segments(
+    controller, qtbot, scene_video, tmp_path, floating
+):
     c = controller
+    c.segments_dock.setFloating(floating)
     c.paths = [scene_video]
     c.load(0)
     qtbot.waitUntil(lambda: c.ready and c.player.duration() == 6000, timeout=15000)
@@ -809,8 +813,9 @@ def test_preferences_restored_from_config_file(controller, qtbot, source, tmp_pa
     assert restored.auto_delay.value() == 12
     assert restored.quit_delay.value() == 45
     assert restored.tabs.currentIndex() == 1
-    assert restored.settings.contains("window_geometry")
-    assert restored.settings.contains("splitter_state")
+    assert restored.settings.contains("mainWindow/geometry")
+    assert restored.settings.contains("mainWindow/state")
+    assert restored.settings.contains("mainWindow/splitterState")
     assert not {"geometry", "turns", "preset", "centered", "lock"}.intersection(
         restored.settings.allKeys()
     )
@@ -990,3 +995,106 @@ def test_split_segment_in_place(controller, qtbot, source, trigger):
         (4.5, 6),
         (6, 8),
     ]
+
+
+@pytest.mark.parametrize("placement", ["left", "floating", "hidden"])
+def test_segments_dock_layout_persistence_and_reset(controller, qtbot, placement):
+    c = controller
+    dock = c.segments_dock
+    toggle = dock.toggleViewAction()
+    view_menu = next(
+        action.menu()
+        for action in c.window.menuBar().actions()
+        if action.text() == "&View"
+    )
+    assert view_menu.actions() == [
+        toggle,
+        view_menu.actions()[1],
+        c.reset_layout_action,
+    ]
+    assert view_menu.actions()[1].isSeparator()
+    assert toggle.isCheckable() and toggle.isChecked()
+    assert c.window.dockWidgetArea(dock) == Qt.DockWidgetArea.RightDockWidgetArea
+    for widget in (
+        c.segment_list,
+        c.segment_summary,
+        c.detect_button,
+        c.clear_segments_button,
+        c.split_segment_button,
+    ):
+        assert dock.isAncestorOf(widget)
+    assert not dock.isAncestorOf(c.tabs)
+    dock.close()
+    assert not toggle.isChecked()
+    toggle.trigger()
+    assert dock.isVisible()
+    c.window.resize(1400, 900)
+    c.window.move(60, 60)
+    c.window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
+    if placement == "floating":
+        dock.setFloating(True)
+        dock.resize(420, 500)
+        dock.move(120, 120)
+    elif placement == "hidden":
+        toggle.trigger()
+    c.splitter.setSizes([600, 400])
+    qtbot.wait(50)
+    geometry = c.window.geometry()
+    dock_geometry = dock.geometry()
+    sizes = c.splitter.sizes()
+    c.window.close()
+
+    restored = app.Application()
+    qtbot.addWidget(restored.window)
+    restored.window.show()
+    qtbot.wait(50)
+    dock = restored.segments_dock
+    assert restored.window.geometry() == geometry
+    assert restored.window.dockWidgetArea(dock) == Qt.DockWidgetArea.LeftDockWidgetArea
+    assert dock.isFloating() == (placement == "floating")
+    assert dock.isVisible() == (placement != "hidden")
+    assert dock.toggleViewAction().isChecked() == (placement != "hidden")
+    assert restored.splitter.sizes() == sizes
+    if placement == "floating":
+        assert dock.geometry() == dock_geometry
+    restored.reset_layout_action.trigger()
+    assert not dock.isFloating()
+    assert dock.isVisible()
+    assert dock.toggleViewAction().isChecked()
+    assert restored.window.dockWidgetArea(dock) == Qt.DockWidgetArea.RightDockWidgetArea
+    assert restored.window.geometry() == geometry
+    restored.window.close()
+
+    reset = app.Application()
+    qtbot.addWidget(reset.window)
+    reset.window.show()
+    assert not reset.segments_dock.isFloating()
+    assert reset.segments_dock.isVisible()
+    assert (
+        reset.window.dockWidgetArea(reset.segments_dock)
+        == Qt.DockWidgetArea.RightDockWidgetArea
+    )
+    reset.window.close()
+
+
+def test_hidden_segments_stay_linked_to_timeline(controller, qtbot, source):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 2), (2, 8)])
+    c.segments_dock.hide()
+    c.seek_segment(4500)
+    assert c.segment_list.currentRow() == c.active_segment == 1
+    c.split_segment_action.trigger()
+    assert c.active_segment == 2
+    assert c.segment_list.count() == len(c.segment_regions) == 3
+    c.segments_dock.toggleViewAction().trigger()
+    assert c.segment_list.currentRow() == 2
+    c.segments_dock.setFloating(True)
+    c.segment_list.setFocus()
+    qtbot.keyClick(c.segment_list, Qt.Key.Key_Home)
+    assert c.active_segment == 0
+    c.clear_segments_button.click()
+    assert c.segment_list.count() == len(c.segment_regions) == 0
+    assert not c.export_button.isEnabled()

@@ -17,7 +17,7 @@ Open multiple videos with Ctrl+O or drop files on the window. Detect segments,
 select one, then drag its crop or its eight handles; use the numeric fields for
 keyboard editing. Export requires segments. The source is never overwritten.
 
-Use **Segment → Detect segments…** (or the button above the crop controls) to
+Use **Segment → Detect segments…** (or the button in the Segments panel) to
 split the video at scene changes. Adjust the scene threshold (lower detects more
 cuts), minimum segment length, frame step, and decoder threads in the dialog. These preferences are saved in
 QSettings and restored when the dialog is reopened, including after restarting
@@ -31,10 +31,17 @@ Application preferences use QSettings in `settings.ini` under platformdirs' user
 config directory (`%LOCALAPPDATA%\FastVideoCropper` on Windows). Detection options,
 mute, preview and zoom preferences, encoder/device, completion actions and delays,
 folder, window geometry, panel sizes, and selected tab are restored on startup.
+Window geometry, dock layout, and splitter sizes use the `mainWindow` settings group.
 Crop geometry, rotation, preset, and aspect lock belong to each video's segments
 and are retained only during the session.
 
-Select a segment in the right-hand list or click its timeline region to edit its
+The **Segments** panel docks on the right by default. Drag its title bar to move
+it to another dock area or float it in a separate window. **View → Segments**
+shows or hides it. **View → Reset Layout** restores the default dock arrangement
+and splitter sizes without changing the main window's size or position.
+Panel position, size, floating state, and visibility are restored on startup.
+
+Select a segment in the Segments list or click its timeline region to edit its
 crop, rotation, aspect preset, and aspect lock independently.
 **Export segments** writes separate `name_SEGMENT_001_CROPPED.ext`,
 `name_SEGMENT_002_CROPPED.ext`, etc. beside the source, overwriting matching outputs.

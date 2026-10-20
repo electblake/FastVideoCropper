@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a dockable Segments panel with a View menu visibility toggle and Reset Layout action.
 - Added a Split segment menu action and button that split at the scrubber position in place, preserving crop settings and segment order.
 - Added FFmpeg scene detection with adjustable scene threshold and minimum segment length.
 - Added frame-step and decoder-thread controls for scene detection, persisted in QSettings.
@@ -18,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Saved window geometry, dock placement, floating state, visibility, and splitter sizes under the `mainWindow` QSettings group.
 - Stored application preferences in a QSettings INI file under the platformdirs user config directory, including mute and window layout.
 - Kept crop geometry, rotation, presets, and aspect locks specific to each video's segments.
 - Displayed current position and total duration separately as `HH:MM:SS` in the playback row.
