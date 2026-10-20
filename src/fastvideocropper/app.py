@@ -301,6 +301,11 @@ class Application(QObject):
         self.button(
             "Set Out", lambda: self.end.setValue(self.player.position() / 1000), buttons
         )
+        self.button(
+            "Clear In/Out",
+            lambda: (self.start.setValue(0), self.end.setValue(self.end.maximum())),
+            buttons,
+        )
         playback.addLayout(buttons)
         range_form = QFormLayout()
         range_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)

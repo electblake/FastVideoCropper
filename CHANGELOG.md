@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added a Clear In/Out button after Set Out to reset the trim range to the full video.
+
 ## [0.3.1] - 2026-10-20
 
 ### Added
