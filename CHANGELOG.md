@@ -10,12 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added FFmpeg scene detection with adjustable scene threshold and minimum segment length.
+- Added frame-step and decoder-thread controls for scene detection, persisted in QSettings.
 - Added live scene-detection progress showing percentage, video time scanned, cut count, and a completion summary.
 - Added a Segment menu, selectable segment list, timeline markers, and independent crop, rotation, and aspect settings for each segment.
 - Added separate numbered exports for cropped segments and a Clear segments action to restart detection.
 
 ### Changed
 
+- Changed scene-threshold adjustments to increments of 0.01.
 - Saved scene-detection threshold and minimum segment length in QSettings.
 - Moved scene detection, video metadata probing, and GPU discovery onto Qt process signals.
 - Bounded the process log to limit memory use during long operations.
@@ -27,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Linked scrubber seeking to segment selection and crop settings without moving away from the chosen frame.
 - Displayed each segment's crop, rotation, aspect settings, and time range in the preview as the export queue advances.
 - Prevented queued video frames from marking a new source ready before metadata and duration loaded.
 - Allowed scene detection to be canceled without deleting previous exports or replacing existing segments.

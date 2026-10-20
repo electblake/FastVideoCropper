@@ -7,7 +7,7 @@ import psutil
 import pytest
 from PySide6.QtCore import QMimeData, QPointF, QSettings, Qt, QTimer, QUrl
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
-from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox
+from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QSpinBox
 
 from fastvideocropper import app
 
@@ -73,6 +73,10 @@ def test_detect_select_clear_segments(controller, qtbot, scene_video, tmp_path):
             if d.windowTitle() == "Detect segments"
         )
         dialog.grab().save(str(tmp_path / "detection-dialog.png"))
+        framestep, threads = dialog.findChildren(QSpinBox)
+        assert (framestep.value(), threads.value()) == (1, 0)
+        framestep.setValue(2)
+        threads.setValue(1)
         dialog.findChild(QDialogButtonBox).button(
             QDialogButtonBox.StandardButton.Ok
         ).click()
@@ -86,6 +90,19 @@ def test_detect_select_clear_segments(controller, qtbot, scene_video, tmp_path):
     assert c.progress_text.text() == "Scene detection complete — 3 segments"
     assert [(s.start, s.end) for s in c.segments] == [(0, 2), (2, 4), (4, 6)]
     assert c.segment_list.count() == 3
+    assert c.scene_scan.framestep == 2
+    assert c.scene_scan.threads == 1
+    assert c.settings.value("scene_framestep", type=int) == 2
+    assert c.settings.value("scene_decoder_threads", type=int) == 1
+
+    def check_saved_detection():
+        dialog = QApplication.activeModalWidget()
+        framestep, threads = dialog.findChildren(QSpinBox)
+        assert (framestep.value(), threads.value()) == (2, 1)
+        dialog.reject()
+
+    QTimer.singleShot(100, check_saved_detection)
+    c.detect_action.trigger()
     assert c.export_button.isEnabled()
     assert c.crop_page.isEnabled()
     assert len(c.segment_regions) == 3
@@ -216,6 +233,30 @@ def test_export_segments_with_independent_crops(controller, qtbot, source, previ
     assert c.export_jobs[1].output.name.endswith("_SEGMENT_002_CROPPED.mp4")
 
 
+def test_scrubber_selects_segment_without_jumping_to_start(controller, qtbot, source):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 2), (2, 8)])
+    c.set_rect((20, 30, 160, 120))
+    c.segment_list.setCurrentRow(1)
+    c.rotate(1)
+    c.set_rect((10, 20, 100, 200))
+    c.lock.setChecked(True)
+    saved = [(s.rect, s.turns, s.locked) for s in c.segments]
+
+    for position, index in [(1500, 0), (2000, 1), (5750, 1), (0, 0), (8000, 1)]:
+        c.seek.setValue(position)
+        assert c.segment_list.currentRow() == index
+        assert c.active_segment == index
+        assert c.player.position() == position
+        assert c.turns == saved[index][1]
+        assert c.lock.isChecked() == saved[index][2]
+        assert c.rect() == [(20, 30, 160, 120), (10, 20, 100, 200)][index]
+    assert [(s.rect, s.turns, s.locked) for s in c.segments] == saved
+
+
 def test_segment_ranges_preserve_precision_when_switching(controller, qtbot, source):
     c = controller
     c.paths = [source]
@@ -247,7 +288,7 @@ def test_detection_progress_and_cancel(
         start(program, arguments)
 
     monkeypatch.setattr(c.process, "start", realtime)
-    c.detect_segments(1, 0)
+    c.detect_segments(1, 0, framestep=30, threads=1)
     qtbot.waitUntil(lambda: c.progress.value() > 5, timeout=5000)
     assert c.detecting
     assert "0 cuts found" in c.progress_text.text()

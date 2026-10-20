@@ -16,11 +16,13 @@ class Segment:
 
 
 class SceneScan:
-    def __init__(self, source, duration, threshold, minimum):
+    def __init__(self, source, duration, threshold, minimum, framestep=1, threads=0):
         self.source = source
         self.duration = duration
         self.threshold = threshold
         self.minimum = minimum
+        self.framestep = framestep
+        self.threads = threads
         self.boundaries = [0.0]
         self.buffer = ""
 
@@ -28,12 +30,15 @@ class SceneScan:
         return [
             "-hide_banner",
             "-nostdin",
+            "-threads:v",
+            str(self.threads),
             "-i",
             str(self.source),
             "-filter_complex",
             (
                 "[0:v:0]split=2[scan][scenes];"
-                f"[scenes]select='gt(scene,{self.threshold})',showinfo,nullsink"
+                f"[scenes]framestep={self.framestep},"
+                f"select='gt(scene,{self.threshold})',showinfo,nullsink"
             ),
             "-map",
             "[scan]",

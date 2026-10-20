@@ -298,7 +298,7 @@ class Application(QObject):
         self.seek = QSlider(Qt.Orientation.Horizontal)
         self.seek.setAccessibleName("Playback position")
         self.seek.setSingleStep(250)
-        self.seek.valueChanged.connect(self.player.setPosition)
+        self.seek.valueChanged.connect(self.seek_segment)
         playback.addWidget(self.seek)
         self.range_graph = pg.GraphicsLayoutWidget()
         self.range_graph.setBackground(self.window.palette().window().color())
@@ -522,7 +522,7 @@ class Application(QObject):
         threshold = QDoubleSpinBox()
         threshold.setRange(0, 1)
         threshold.setDecimals(2)
-        threshold.setSingleStep(0.05)
+        threshold.setSingleStep(0.01)
         threshold.setValue(self.settings.value("scene_threshold", 0.3, float))
         threshold.valueChanged.connect(
             lambda value: self.settings.setValue("scene_threshold", value)
@@ -541,6 +541,25 @@ class Application(QObject):
         )
         minimum.setToolTip("Ignore cuts that would create a shorter segment.")
         form.addRow("&Minimum segment length", minimum)
+        framestep = QSpinBox()
+        framestep.setRange(1, 2147483647)
+        framestep.setValue(self.settings.value("scene_framestep", 1, int))
+        framestep.valueChanged.connect(
+            lambda value: self.settings.setValue("scene_framestep", value)
+        )
+        framestep.setToolTip(
+            "Analyze every Nth frame. 1 checks every frame; larger steps can miss short scenes."
+        )
+        form.addRow("&Frame step", framestep)
+        threads = QSpinBox()
+        threads.setRange(0, 2147483647)
+        threads.setSpecialValueText("Auto")
+        threads.setValue(self.settings.value("scene_decoder_threads", 0, int))
+        threads.valueChanged.connect(
+            lambda value: self.settings.setValue("scene_decoder_threads", value)
+        )
+        threads.setToolTip("Decoder thread count. Auto lets FFmpeg choose.")
+        form.addRow("&Decoder threads", threads)
         layout.addLayout(form)
         hint = QLabel(
             "Lower threshold = more cuts. Increase minimum length to skip short scenes."
@@ -555,10 +574,12 @@ class Application(QObject):
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.detect_segments(threshold.value(), minimum.value())
+            self.detect_segments(
+                threshold.value(), minimum.value(), framestep.value(), threads.value()
+            )
         dialog.deleteLater()
 
-    def detect_segments(self, threshold, minimum):
+    def detect_segments(self, threshold, minimum, framestep=1, threads=0):
         self.count_cancelled()
         self.player.pause()
         self.detecting = True
@@ -573,6 +594,8 @@ class Application(QObject):
             self.player.duration() / 1000,
             threshold,
             minimum,
+            framestep,
+            threads,
         )
         self.log.clear()
         self.log.appendPlainText(
@@ -695,7 +718,7 @@ class Application(QObject):
         self.update_segment_summary()
         self.update_crop_summary()
 
-    def select_segment(self, index):
+    def select_segment(self, index, seek_start=True):
         if index < 0:
             return
         self.save_segment()
@@ -716,7 +739,8 @@ class Application(QObject):
         self.restoring_segment = False
         self.update_crop_summary()
         self.fit()
-        self.player.setPosition(round(segment.start * 1000))
+        if seek_start:
+            self.player.setPosition(round(segment.start * 1000))
 
     def update_crop_summary(self):
         if self.active_segment < 0:
@@ -868,6 +892,20 @@ class Application(QObject):
         self.time.setText(
             f"{position / 1000:.3f} / {self.player.duration() / 1000:.3f} s"
         )
+
+    def seek_segment(self, position):
+        for index, segment in enumerate(self.segments):
+            if segment.start <= position / 1000 < segment.end or (
+                position == self.player.duration() == round(segment.end * 1000)
+            ):
+                if index != self.active_segment:
+                    self.segment_list.blockSignals(True)
+                    self.segment_list.setCurrentRow(index)
+                    self.segment_list.blockSignals(False)
+                    self.select_segment(index, seek_start=False)
+                    self.segment_list.scrollToItem(self.segment_list.currentItem())
+                break
+        self.player.setPosition(position)
 
     def playback_changed(self, state):
         self.play.setText(
