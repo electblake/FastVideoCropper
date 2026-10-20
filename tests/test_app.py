@@ -109,7 +109,7 @@ def test_automatically_create_first_segment(
     assert not c.auto_segment.isChecked()
     c.paths = [source, other]
     c.load(0)
-    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    qtbot.waitUntil(lambda: c.ready and not c.load_timer.isActive(), timeout=15000)
     assert not c.segments
     c.auto_segment.setChecked(True)
     assert not c.segments
@@ -155,7 +155,7 @@ def test_automatically_create_first_segment(
     )
     segment = c.segments[0]
     c.load(c.index)
-    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    qtbot.waitUntil(lambda: c.ready and not c.load_timer.isActive(), timeout=15000)
     assert c.segments == [segment]
     assert c.segments[0] is segment
     assert (
@@ -554,7 +554,6 @@ def test_export_segments_with_independent_crops(controller, qtbot, source, previ
                 c.rect(),
                 c.turns,
                 c.lock.isChecked(),
-                c.crop_summary.text(),
                 [field.value() for field in c.fields[2:]],
                 c.player.isPlaying(),
             )
@@ -567,19 +566,14 @@ def test_export_segments_with_independent_crops(controller, qtbot, source, previ
     assert c.window.statusBar().currentMessage() == "Complete — 2 segments saved"
     assert source in c.done
     assert len(observed) == 2
-    for index, (row, rect, turns, locked, summary, size, playing) in enumerate(
-        observed
-    ):
+    for index, (row, rect, turns, locked, size, playing) in enumerate(observed):
         assert row == index
         assert rect == [(20, 30, 160, 120), (10, 20, 100, 200)][index]
         assert turns == index
         assert locked == saved[index][3]
-        assert f"Processing segment {index + 1} of 2" in summary
-        assert f"Crop {size[0]:.0f} × {size[1]:.0f}" in summary
         assert size == list(rect[2:])
         assert not playing
     assert [(s.rect, s.turns, s.preset, s.locked) for s in c.segments] == saved
-    assert "Selected segment 2 of 2" in c.crop_summary.text()
     for job, size, frames in zip(c.export_jobs, [(160, 120), (100, 200)], [20, 60]):
         metadata = json.loads(
             subprocess.check_output(
@@ -1430,9 +1424,6 @@ def test_segment_selection_remains_visible(controller, qtbot, source, tmp_path):
         assert selected.currentBrush == selected.brush
         selected.setMouseHover(False)
         qtbot.wait(50)
-        assert c.crop_summary.height() >= c.crop_summary.heightForWidth(
-            c.crop_summary.width()
-        )
         c.window.grab().save(str(tmp_path / f"selection-{index}.png"))
     c.running = True
     c.update_enabled()

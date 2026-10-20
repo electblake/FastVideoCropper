@@ -285,12 +285,6 @@ class Application(QObject):
         layout.addWidget(splitter, 1)
         left = QWidget()
         left_layout = QVBoxLayout(left)
-        self.crop_summary = QLabel("No segment selected")
-        self.crop_summary.setWordWrap(True)
-        self.crop_summary.setSizePolicy(
-            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum
-        )
-        left_layout.addWidget(self.crop_summary)
         self.graphics = pg.GraphicsLayoutWidget()
         self.graphics.setBackground(self.window.palette().window().color())
         self.view = self.graphics.addViewBox(
@@ -1134,7 +1128,6 @@ class Application(QObject):
             (segment.start, segment.end)
         )
         self.update_segment_summary()
-        self.update_crop_summary()
 
     def select_segment(self, index, seek_start=True):
         if index < 0:
@@ -1167,40 +1160,9 @@ class Application(QObject):
             region.setHoverBrush(brush)
             region.update()
         self.restoring_segment = False
-        self.update_crop_summary()
         self.fit()
         if seek_start:
             self.player.setPosition(round(segment.start * 1000))
-
-    def update_crop_summary(self):
-        if self.active_segment < 0:
-            self.crop_summary.setText("No segment selected")
-            return
-        state = "Processing" if self.running and not self.detecting else "Selected"
-        segment = self.segments[self.active_segment]
-        x, y, w, h = segment.rect
-        _, _, output_w, output_h = padded_rect(
-            (
-                x * self.pixel_width,
-                y * self.pixel_height,
-                w * self.pixel_width,
-                h * self.pixel_height,
-            ),
-            segment.padding_x,
-            segment.padding_y,
-            self.pixel_width,
-            self.pixel_height,
-        )
-        self.crop_summary.setText(
-            f"{state} segment {self.active_segment + 1} of {len(self.segments)} • "
-            f"{segment.start:.3f} – {segment.end:.3f} s\n"
-            f"Crop {w * self.pixel_width:.0f} × {h * self.pixel_height:.0f} at "
-            f"{x * self.pixel_width:.0f}, {y * self.pixel_height:.0f} • "
-            f"{segment.preset} • Rotation {segment.turns * 90}° • "
-            f"Aspect {'locked' if segment.locked else 'unlocked'}\n"
-            f"Padding X {segment.padding_x:+d} px / Y {segment.padding_y:+d} px per side • "
-            f"Output {output_w:.0f} × {output_h:.0f}"
-        )
 
     def select_timeline_segment(self, event):
         if (
@@ -1967,7 +1929,6 @@ class Application(QObject):
     def update_enabled(self):
         self.update_split_enabled()
         self.update_navigation()
-        self.update_crop_summary()
         busy = self.running or self.loading or self.resolving_encoder
         self.add_segment_action.setEnabled(self.ready and not busy)
         self.add_segment_button.setEnabled(self.ready and not busy)

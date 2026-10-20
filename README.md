@@ -56,8 +56,8 @@ current output. **Segment → Clear segments** removes all segments and disables
 export until detection creates new segments. Segment settings remain
 available when navigating between videos during the session.
 Export saves the selected crop before starting, selects and scrolls to each segment
-as it is processed, and loads its crop overlay and settings. The preview identifies
-the segment, time range, crop dimensions and position, rotation, and aspect lock.
+as it is processed, and loads its crop overlay and settings. The status bar shows
+the processing segment, progress, speed, and estimated time remaining.
 Crop editing stays locked during export so the displayed settings match the output.
 Turning off preview updates still loads the starting frame for each segment.
 
