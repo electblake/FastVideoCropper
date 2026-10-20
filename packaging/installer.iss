@@ -22,10 +22,12 @@ SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
 ArchiveExtraction=full
+LicenseFile=..\LICENSE
 InfoBeforeFile=online-install.txt
 SetupLogging=yes
 
 [Files]
+Source: "..\LICENSE"; DestDir: "{app}\application"; Flags: ignoreversion
 Source: "..\pyproject.toml"; DestDir: "{app}\application"; Flags: ignoreversion
 Source: "..\uv.lock"; DestDir: "{app}\application"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}\application"; Flags: ignoreversion
@@ -52,6 +54,7 @@ Type: filesandordirs; Name: "{app}\_internal"
 [Run]
 Filename: "{app}\tools\uv\uv.exe"; Parameters: "python install 3.13.12 --install-dir ""{app}\python"" --no-bin --no-registry --no-config --no-cache"; StatusMsg: "Downloading Python 3.13.12..."; Flags: runhidden logoutput
 Filename: "{app}\tools\uv\uv.exe"; Parameters: "sync --project ""{app}\application"" --python ""{app}\python\cpython-3.13.12-windows-x86_64-none\python.exe"" --no-python-downloads --locked --no-dev --no-editable --no-config --no-cache"; StatusMsg: "Installing locked Python dependencies..."; Flags: runhidden logoutput
+; postinstall is checked by default; omit unchecked to launch on Finish.
 Filename: "{app}\application\.venv\Scripts\pythonw.exe"; Parameters: "-I -m fastvideocropper.installed"; WorkingDir: "{app}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]

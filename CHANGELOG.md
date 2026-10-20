@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-20
+
+### Added
+
+- Added the standard MIT license and displayed it as the Windows installer agreement.
+- Included the license in the installed application and package metadata.
+
+### Changed
+
+- Documented the preselected launch-on-finish option; silent installations continued to skip launch.
+
 ## [0.3.0] - 2026-10-20
 
 ### Changed
