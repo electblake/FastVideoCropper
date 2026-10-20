@@ -252,6 +252,9 @@ class Application(QObject):
         layout.addWidget(splitter, 1)
         left = QWidget()
         left_layout = QVBoxLayout(left)
+        self.crop_summary = QLabel("No segment selected")
+        self.crop_summary.setWordWrap(True)
+        left_layout.addWidget(self.crop_summary)
         self.graphics = pg.GraphicsLayoutWidget()
         self.graphics.setBackground(self.window.palette().window().color())
         self.view = self.graphics.addViewBox(
@@ -275,6 +278,7 @@ class Application(QObject):
         ]:
             self.roi.addScaleHandle(pos, (1 - pos[0], 1 - pos[1]))
         self.roi.setZValue(2)
+        self.roi.setPen(pg.mkPen("#ffd166", width=2))
         self.view.addItem(self.roi)
         self.roi.sigRegionChanged.connect(self.geometry_changed)
         self.roi.sigRegionChangeFinished.connect(self.geometry_finished)
@@ -302,23 +306,7 @@ class Application(QObject):
         self.range_view = self.range_graph.addViewBox(
             enableMouse=False, enableMenu=False
         )
-        self.range_region = pg.LinearRegionItem((0, 1), movable=False)
-        self.range_view.addItem(self.range_region)
         self.range_graph.scene().sigMouseClicked.connect(self.select_timeline_segment)
-        self.range_labels = [
-            pg.InfLineLabel(
-                self.range_region.lines[0],
-                "In",
-                position=0.2,
-                color=self.window.palette().text().color(),
-            ),
-            pg.InfLineLabel(
-                self.range_region.lines[1],
-                "Out",
-                position=0.2,
-                color=self.window.palette().text().color(),
-            ),
-        ]
         playback.addWidget(self.range_graph)
         buttons = QHBoxLayout()
         self.play = self.button("Play", self.toggle_play, buttons)
@@ -328,32 +316,7 @@ class Application(QObject):
         self.time = QLabel("0.000 / 0.000 s")
         buttons.addWidget(self.time)
         buttons.addStretch()
-        self.button(
-            "Set In",
-            lambda: self.start.setValue(self.player.position() / 1000),
-            buttons,
-        )
-        self.button(
-            "Set Out", lambda: self.end.setValue(self.player.position() / 1000), buttons
-        )
-        self.button(
-            "Clear In/Out",
-            lambda: (self.start.setValue(0), self.end.setValue(self.end.maximum())),
-            buttons,
-        )
         playback.addLayout(buttons)
-        range_form = QFormLayout()
-        range_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        self.start = QDoubleSpinBox()
-        self.end = QDoubleSpinBox()
-        self.start.valueChanged.connect(self.range_changed)
-        self.end.valueChanged.connect(self.range_changed)
-        for label, control in [("&In", self.start), ("&Out", self.end)]:
-            control.setDecimals(3)
-            control.setSuffix(" s")
-            control.setSingleStep(0.25)
-            range_form.addRow(label, control)
-        playback.addLayout(range_form)
         left_layout.addWidget(self.transport)
         self.progress = QProgressBar()
         left_layout.addWidget(self.progress)
@@ -512,7 +475,7 @@ class Application(QObject):
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(2000)
         tabs.addTab(self.log, "Process log")
-        self.export_button = self.button("Crop!", self.export, right_layout)
+        self.export_button = self.button("Export segments", self.export, right_layout)
         self.advance = QCheckBox("Load next after completion")
         self.auto = QCheckBox("Auto-run next")
         self.quit_done = QCheckBox("Quit when done")
@@ -541,7 +504,7 @@ class Application(QObject):
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([750, 420])
         self.window.statusBar().showMessage(
-            "Source preview • output replaces an existing _CROPPED file"
+            "Source preview • exports replace matching numbered segment files"
         )
 
     def show_scene_detection(self):
@@ -560,7 +523,10 @@ class Application(QObject):
         threshold.setRange(0, 1)
         threshold.setDecimals(2)
         threshold.setSingleStep(0.05)
-        threshold.setValue(0.3)
+        threshold.setValue(self.settings.value("scene_threshold", 0.3, float))
+        threshold.valueChanged.connect(
+            lambda value: self.settings.setValue("scene_threshold", value)
+        )
         threshold.setToolTip(
             "Lower values detect smaller changes and usually create more segments."
         )
@@ -569,7 +535,10 @@ class Application(QObject):
         minimum.setRange(0, self.player.duration() / 1000)
         minimum.setDecimals(3)
         minimum.setSuffix(" s")
-        minimum.setValue(1)
+        minimum.setValue(self.settings.value("scene_minimum_length", 1.0, float))
+        minimum.valueChanged.connect(
+            lambda value: self.settings.setValue("scene_minimum_length", value)
+        )
         minimum.setToolTip("Ignore cuts that would create a shorter segment.")
         form.addRow("&Minimum segment length", minimum)
         layout.addLayout(form)
@@ -644,20 +613,24 @@ class Application(QObject):
         self.update_enabled()
 
     def clear_segments(self):
+        self.count_cancelled()
         self.active_segment = -1
         self.segments.clear()
         self.refresh_segments()
-        self.start.setValue(0)
-        self.end.setValue(self.end.maximum())
         self.progress.setValue(0)
         self.progress_text.setText("Ready")
         self.update_enabled()
 
     def segment_text(self, index):
         segment = self.segments[index]
+        width, height = self.source_width, self.source_height
+        if (self.source_rotation + segment.turns) % 2:
+            width, height = height, width
+        x, y, w, h = segment.rect
         return (
             f"{index + 1:02d}   {segment.start:.3f} – {segment.end:.3f} s\n"
             f"Duration {segment.end - segment.start:.3f} s\n"
+            f"Crop {w * width:.0f} × {h * height:.0f} at {x * width:.0f}, {y * height:.0f}\n"
             f"{segment.preset} • Rotation {segment.turns * 90}°"
         )
 
@@ -702,7 +675,7 @@ class Application(QObject):
             self.export_button.setText(f"Export {len(self.segments)} segments")
         else:
             self.segment_summary.setText("No segments — detect scenes to begin")
-            self.export_button.setText("Crop!")
+            self.export_button.setText("Export segments")
 
     def save_segment(self):
         if self.active_segment < 0 or self.restoring_segment:
@@ -720,6 +693,7 @@ class Application(QObject):
             (segment.start, segment.end)
         )
         self.update_segment_summary()
+        self.update_crop_summary()
 
     def select_segment(self, index):
         if index < 0:
@@ -734,12 +708,31 @@ class Application(QObject):
         )
         self.set_preset(segment.preset)
         self.lock.setChecked(segment.locked)
-        self.start.setValue(segment.start)
-        self.end.setValue(segment.end)
         self.active_segment = index
+        for row, region in enumerate(self.segment_regions):
+            brush = self.window.palette().highlight().color()
+            brush.setAlpha(130 if row == index else 60)
+            region.setBrush(brush)
         self.restoring_segment = False
+        self.update_crop_summary()
         self.fit()
         self.player.setPosition(round(segment.start * 1000))
+
+    def update_crop_summary(self):
+        if self.active_segment < 0:
+            self.crop_summary.setText("No segment selected")
+            return
+        state = "Processing" if self.running and not self.detecting else "Selected"
+        segment = self.segments[self.active_segment]
+        x, y, w, h = segment.rect
+        self.crop_summary.setText(
+            f"{state} segment {self.active_segment + 1} of {len(self.segments)} • "
+            f"{segment.start:.3f} – {segment.end:.3f} s\n"
+            f"Crop {w * self.pixel_width:.0f} × {h * self.pixel_height:.0f} at "
+            f"{x * self.pixel_width:.0f}, {y * self.pixel_height:.0f} • "
+            f"{segment.preset} • Rotation {segment.turns * 90}° • "
+            f"Aspect {'locked' if segment.locked else 'unlocked'}"
+        )
 
     def select_timeline_segment(self, event):
         if (
@@ -865,32 +858,8 @@ class Application(QObject):
 
     def duration_changed(self, duration):
         self.seek.setRange(0, duration)
-        self.start.blockSignals(True)
-        self.end.blockSignals(True)
-        self.start.setMaximum(duration / 1000)
-        self.end.setMaximum(duration / 1000)
-        if self.active_segment >= 0:
-            segment = self.segments[self.active_segment]
-            self.start.setValue(segment.start)
-            self.end.setValue(segment.end)
-        else:
-            self.start.setValue(0)
-            self.end.setValue(duration / 1000)
-        self.start.blockSignals(False)
-        self.end.blockSignals(False)
-        self.range_region.setRegion((self.start.value(), self.end.value()))
         self.position_changed(self.player.position())
         self.range_view.setXRange(0, duration / 1000, padding=0)
-
-    def range_changed(self):
-        self.range_region.setRegion((self.start.value(), self.end.value()))
-        if self.active_segment >= 0 and not self.restoring_segment:
-            segment = self.segments[self.active_segment]
-            if self.sender() is self.start:
-                segment.start = self.start.value()
-            if self.sender() is self.end:
-                segment.end = self.end.value()
-        self.save_segment()
 
     def position_changed(self, position):
         self.seek.blockSignals(True)
@@ -1149,33 +1118,18 @@ class Application(QObject):
                     index + 1,
                 )
             )
-        if not self.segments:
-            x, y, w, h = self.rect()
-            pixel_rect = (
-                x / self.width * self.pixel_width,
-                y / self.height * self.pixel_height,
-                w / self.width * self.pixel_width,
-                h / self.height * self.pixel_height,
-            )
-            job = Export(
-                self.paths[self.index],
-                pixel_rect,
-                self.turns,
-                self.start.value(),
-                self.end.value(),
-                self.square.isChecked(),
-                encoder,
-                self.device.value(),
-            )
-            self.export_jobs.append(job)
         self.export_index = 0
         self.log.clear()
         self.start_export_job()
 
     def start_export_job(self):
         self.job = self.export_jobs[self.export_index]
-        if self.segments:
-            self.segment_list.setCurrentRow(self.export_index)
+        self.player.pause()
+        self.segment_list.blockSignals(True)
+        self.segment_list.setCurrentRow(self.export_index)
+        self.segment_list.blockSignals(False)
+        self.select_segment(self.export_index)
+        self.segment_list.scrollToItem(self.segment_list.currentItem())
         self.output = self.job.output
         self.done.discard(self.job.source)
         self.running = True
@@ -1186,13 +1140,16 @@ class Application(QObject):
         self.processing_position = self.job.start
         self.seek_pending = False
         self.progress.setValue(0)
-        self.progress_text.setText("Starting…")
+        self.progress_text.setText(
+            f"Starting segment {self.export_index + 1}/{len(self.export_jobs)} • "
+            f"{self.job.start:.3f} – {self.job.end:.3f} s"
+        )
         self.log.appendPlainText(
             subprocess.list2cmdline([self.ffmpeg, *self.job.arguments()])
         )
-        self.process.start(self.ffmpeg, self.job.arguments())
         self.preview_changed()
         self.update_enabled()
+        self.process.start(self.ffmpeg, self.job.arguments())
 
     def install_explorer(self):
         self.count_cancelled()
@@ -1244,7 +1201,7 @@ class Application(QObject):
                 if speed != "N/A" and float(speed.rstrip("x")) > 0:
                     eta = f" • ETA {(self.job.end - self.job.start - elapsed) / float(speed.rstrip('x')):.0f} s"
                 self.progress_text.setText(
-                    f"{self.export_index + 1}/{len(self.export_jobs)} • "
+                    f"Processing segment {self.export_index + 1}/{len(self.export_jobs)} • "
                     f"{self.progress.value()}% • {self.progress_values['fps']} fps • {speed}{eta}"
                 )
                 self.processing_position = self.job.start + max(0, elapsed)
@@ -1348,8 +1305,6 @@ class Application(QObject):
             self.progress.setValue(100)
             self.progress_text.setText(
                 f"Complete — {len(self.export_jobs)} segments saved"
-                if self.segments
-                else "Complete — output saved"
             )
             self.done.add(self.job.source)
             self.title.setText(
@@ -1360,7 +1315,7 @@ class Application(QObject):
                 QApplication.alert(self.window)
             if self.advance.isChecked() and self.index + 1 < len(self.paths):
                 self.load(self.index + 1)
-                if self.auto.isChecked():
+                if self.auto.isChecked() and self.segments:
                     self.countdown("export", self.auto_delay.value())
             elif self.quit_done.isChecked():
                 self.countdown("quit", self.quit_delay.value())
@@ -1401,6 +1356,7 @@ class Application(QObject):
         self.count_cancel.hide()
 
     def update_enabled(self):
+        self.update_crop_summary()
         busy = self.running or self.loading or self.resolving_encoder
         self.detect_action.setEnabled(self.ready and not busy)
         self.detect_button.setEnabled(self.ready and not busy)
@@ -1416,9 +1372,9 @@ class Application(QObject):
         self.open_action.setEnabled(not busy)
         self.previous.setEnabled(not busy and self.index > 0)
         self.next.setEnabled(not busy and self.index + 1 < len(self.paths))
-        self.export_button.setEnabled(self.ready and not busy)
-        self.crop_page.setEnabled(self.ready and not busy)
-        self.roi.setEnabled(self.ready and not busy)
+        self.export_button.setEnabled(self.ready and bool(self.segments) and not busy)
+        self.crop_page.setEnabled(self.ready and bool(self.segments) and not busy)
+        self.roi.setEnabled(self.ready and bool(self.segments) and not busy)
         self.encoder.setEnabled(not busy)
         self.device.setEnabled(not busy)
         self.transport.setEnabled(self.ready and not busy)

@@ -9,7 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added a Clear In/Out button after Set Out to reset the trim range to the full video.
 - Added FFmpeg scene detection with adjustable scene threshold and minimum segment length.
 - Added live scene-detection progress showing percentage, video time scanned, cut count, and a completion summary.
 - Added a Segment menu, selectable segment list, timeline markers, and independent crop, rotation, and aspect settings for each segment.
@@ -17,16 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Saved scene-detection threshold and minimum segment length in QSettings.
 - Moved scene detection, video metadata probing, and GPU discovery onto Qt process signals.
 - Bounded the process log to limit memory use during long operations.
 
 ### Removed
 
 - Removed retired frozen-build launcher branches.
+- Removed standalone In/Out controls, timeline labels, and the unsegmented export path.
 
 ### Fixed
 
-- Preserved untouched trim-boundary precision when editing the other boundary.
+- Displayed each segment's crop, rotation, aspect settings, and time range in the preview as the export queue advances.
 - Prevented queued video frames from marking a new source ready before metadata and duration loaded.
 - Allowed scene detection to be canceled without deleting previous exports or replacing existing segments.
 - Released temporary dialogs and closed active scans without blocking the UI until detection completed.

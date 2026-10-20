@@ -14,15 +14,13 @@ class Export:
     square_pixels: bool = False
     encoder: str = "libx265"
     device: int = 0
-    segment_number: int = 0
+    segment_number: int = 1
 
     @property
     def output(self):
-        if self.segment_number:
-            return self.source.with_stem(
-                f"{self.source.stem}_SEGMENT_{self.segment_number:03d}_CROPPED"
-            )
-        return self.source.with_stem(self.source.stem + "_CROPPED")
+        return self.source.with_stem(
+            f"{self.source.stem}_SEGMENT_{self.segment_number:03d}_CROPPED"
+        )
 
     def arguments(self):
         x, y, w, h = self.rect

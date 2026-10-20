@@ -16,7 +16,7 @@ to copy its custom controls or recovery logic.
 | Segment selection | QListWidget and numbered LinearRegionItems | Native keyboard selection and clickable timeline regions |
 | Scene detection | QDialog, QDoubleSpinBox, QProcess; FFmpeg select/showinfo | Streaming progress and diagnostics, with cancellation through the existing process lifecycle |
 | Source and GPU discovery | QProcess | Asynchronous metadata and GPU queries keep the event loop responsive |
-| Precise geometry and time | QDoubleSpinBox | Native keyboard editing, locale, focus and accessibility |
+| Geometry and detection settings | QDoubleSpinBox | Native keyboard editing, locale, focus and accessibility |
 | Aspect presets | Checkable QPushButtons, QButtonGroup, QGridLayout | Twelve directly accessible presets with native selected/focus states |
 | Aspect locking | QCheckBox | Independent, keyboard-accessible lock/unlock toggle |
 | Process lifecycle | QProcess; psutil suspend/resume | Asynchronous pipes plus existing process control |

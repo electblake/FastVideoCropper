@@ -27,9 +27,9 @@ def test_load_crop_rotate_export(controller, qtbot, source, tmp_path):
     c = controller
     c.paths = [source, source]
     c.load(0)
-    qtbot.waitUntil(lambda: c.ready and c.end.value() == 8, timeout=15000)
+    qtbot.waitUntil(lambda: c.ready and c.player.duration() == 8000, timeout=15000)
+    c.replace_segments([(0, c.player.duration() / 1000)])
     assert (c.width, c.height) == (320, 240)
-    assert c.start.value() == 0
     c.set_rect((20, 30, 160, 120))
     c.rotate(1)
     assert c.rect() == (90, 20, 120, 160)
@@ -39,18 +39,16 @@ def test_load_crop_rotate_export(controller, qtbot, source, tmp_path):
     assert c.rect()[2:] == (120, 120)
     c.center()
     assert c.rect() == (100, 60, 120, 120)
-    c.start.setValue(2.3)
-    c.end.setValue(5.7)
+    c.replace_segments([(2.3, 5.7)])
     c.window.grab().save(str(tmp_path / "window.png"))
     c.export()
     assert not c.next.isEnabled()
     qtbot.waitUntil(lambda: not c.running, timeout=30000)
-    assert c.progress_text.text() == "Complete — output saved"
+    assert c.progress_text.text() == "Complete — 1 segments saved"
     assert source in c.done
     assert c.output.exists()
     c.load(1)
-    qtbot.waitUntil(lambda: c.ready and c.end.value() == 8, timeout=15000)
-    assert c.start.value() == 0
+    qtbot.waitUntil(lambda: c.ready and c.player.duration() == 8000, timeout=15000)
     assert c.rect() == (100, 60, 120, 120)
 
 
@@ -58,7 +56,12 @@ def test_detect_select_clear_segments(controller, qtbot, scene_video, tmp_path):
     c = controller
     c.paths = [scene_video]
     c.load(0)
-    qtbot.waitUntil(lambda: c.ready and c.end.value() == 6, timeout=15000)
+    qtbot.waitUntil(lambda: c.ready and c.player.duration() == 6000, timeout=15000)
+    assert not c.export_button.isEnabled()
+    assert not c.crop_page.isEnabled()
+    assert not hasattr(c, "start")
+    assert not hasattr(c, "end")
+    assert not hasattr(c, "range_region")
     c.detection_progress(3, 1)
     assert c.progress.value() == 50
     assert "3.0 / 6.0 s scanned • 1 cuts found" in c.progress_text.text()
@@ -83,6 +86,8 @@ def test_detect_select_clear_segments(controller, qtbot, scene_video, tmp_path):
     assert c.progress_text.text() == "Scene detection complete — 3 segments"
     assert [(s.start, s.end) for s in c.segments] == [(0, 2), (2, 4), (4, 6)]
     assert c.segment_list.count() == 3
+    assert c.export_button.isEnabled()
+    assert c.crop_page.isEnabled()
     assert len(c.segment_regions) == 3
     point = c.range_view.mapViewToScene(QPointF(5, 0.5))
     qtbot.mouseClick(
@@ -102,7 +107,10 @@ def test_detect_select_clear_segments(controller, qtbot, scene_video, tmp_path):
     assert c.turns == 0
     assert c.rect() == (0, 0, 320, 240)
     assert not c.lock.isChecked()
-    assert (c.start.value(), c.end.value()) == (2, 4)
+    assert (c.segments[c.active_segment].start, c.segments[c.active_segment].end) == (
+        2,
+        4,
+    )
     c.set_rect((40, 50, 100, 80))
     c.segment_list.setCurrentRow(0)
     assert c.turns == 1
@@ -114,33 +122,76 @@ def test_detect_select_clear_segments(controller, qtbot, scene_video, tmp_path):
     c.load(0)
     qtbot.waitUntil(lambda: c.ready and c.active_segment == 0, timeout=15000)
     assert c.rect() == first_rect
-    assert (c.start.value(), c.end.value()) == (0, 2)
+    assert (c.segments[c.active_segment].start, c.segments[c.active_segment].end) == (
+        0,
+        2,
+    )
+    c.countdown("export", 30)
     c.clear_segments_action.trigger()
+    assert not c.count_timer.isActive()
     assert c.segments == []
     assert c.segment_list.count() == 0
     assert c.segment_regions == []
-    assert (c.start.value(), c.end.value()) == (0, 6)
+    assert not c.export_button.isEnabled()
+    assert not c.crop_page.isEnabled()
     assert c.detect_button.isEnabled()
     c.detect_segments(0.3, 1)
     qtbot.waitUntil(lambda: not c.detecting, timeout=15000)
     assert len(c.segments) == 3
 
 
-def test_export_segments_with_independent_crops(controller, qtbot, source):
+@pytest.mark.parametrize("preview", [True, False])
+def test_export_segments_with_independent_crops(controller, qtbot, source, preview):
     c = controller
     c.paths = [source]
     c.load(0)
-    qtbot.waitUntil(lambda: c.ready and c.end.value() == 8, timeout=15000)
+    qtbot.waitUntil(lambda: c.ready and c.player.duration() == 8000, timeout=15000)
     c.replace_segments([(0, 2), (2, 8)])
     c.set_rect((20, 30, 160, 120))
     c.segment_list.setCurrentRow(1)
     c.rotate(1)
     c.set_rect((10, 20, 100, 200))
+    c.lock.setChecked(True)
+    c.preview.setChecked(preview)
+    # Exercise both a changed selection and a first segment already selected.
+    if not preview:
+        c.segment_list.setCurrentRow(0)
+    saved = [(s.rect, s.turns, s.preset, s.locked) for s in c.segments]
+    observed = []
+
+    def capture_export_ui():
+        observed.append(
+            (
+                c.segment_list.currentRow(),
+                c.rect(),
+                c.turns,
+                c.lock.isChecked(),
+                c.crop_summary.text(),
+                [field.value() for field in c.fields[2:]],
+                c.player.isPlaying(),
+            )
+        )
+
+    c.process.started.connect(capture_export_ui)
     c.export()
     assert not c.clear_segments_action.isEnabled()
     qtbot.waitUntil(lambda: not c.running, timeout=30000)
     assert c.progress_text.text() == "Complete — 2 segments saved"
     assert source in c.done
+    assert len(observed) == 2
+    for index, (row, rect, turns, locked, summary, size, playing) in enumerate(
+        observed
+    ):
+        assert row == index
+        assert rect == [(20, 30, 160, 120), (10, 20, 100, 200)][index]
+        assert turns == index
+        assert locked == saved[index][3]
+        assert f"Processing segment {index + 1} of 2" in summary
+        assert f"Crop {size[0]:.0f} × {size[1]:.0f}" in summary
+        assert size == list(rect[2:])
+        assert not playing
+    assert [(s.rect, s.turns, s.preset, s.locked) for s in c.segments] == saved
+    assert "Selected segment 2 of 2" in c.crop_summary.text()
     for job, size, frames in zip(c.export_jobs, [(160, 120), (100, 200)], [20, 60]):
         metadata = json.loads(
             subprocess.check_output(
@@ -165,16 +216,16 @@ def test_export_segments_with_independent_crops(controller, qtbot, source):
     assert c.export_jobs[1].output.name.endswith("_SEGMENT_002_CROPPED.mp4")
 
 
-def test_editing_one_boundary_preserves_other_precision(controller, qtbot, source):
+def test_segment_ranges_preserve_precision_when_switching(controller, qtbot, source):
     c = controller
     c.paths = [source]
     c.load(0)
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
     c.replace_segments([(0, 2.033333333), (2.033333333, 8)])
-    c.start.setValue(0.5)
-    assert c.segments[0].end == 2.033333333
+    c.set_rect((0, 0, 160, 120))
     c.segment_list.setCurrentRow(1)
-    c.end.setValue(7.5)
+    c.segment_list.setCurrentRow(0)
+    assert c.segments[0].end == 2.033333333
     assert c.segments[1].start == 2.033333333
 
 
@@ -250,6 +301,7 @@ def test_gpu_probe_keeps_event_loop_responsive(controller, qtbot, source, monkey
     c.paths = [source]
     c.load(0)
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, c.player.duration() / 1000)])
     c.encoder.setCurrentIndex(c.encoder.findData("auto"))
     c.compiled_encoders = "hevc_nvenc"
     start = c.gpu_probe.start
@@ -279,6 +331,7 @@ def test_numeric_lock_and_preset(controller, qtbot, source):
     c.paths = [source]
     c.load(0)
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, c.player.duration() / 1000)])
     c.set_rect((0, 0, 160, 120))
     c.lock.setChecked(True)
     c.fields[2].setValue(80)
@@ -307,6 +360,7 @@ def test_all_stock_handles_preserve_locked_ratio(controller, qtbot, source):
     c.paths = [source]
     c.load(0)
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, c.player.duration() / 1000)])
     c.lock.setChecked(True)
     for handle in c.roi.getHandles():
         c.set_rect((50, 50, 160, 120))
@@ -324,6 +378,7 @@ def test_preset_buttons_lock_rotation_and_restore(controller, qtbot, source, tmp
     c.paths = [source, source]
     c.load(0)
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, c.player.duration() / 1000)])
     for locked in (False, True):
         c.lock.setChecked(locked)
         for name, ratio in app.RATIOS.items():
@@ -364,6 +419,7 @@ def test_position_edits_preserve_fractional_crop(controller, qtbot, source):
     c.paths = [source]
     c.load(0)
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, c.player.duration() / 1000)])
     c.set_rect((10.12345, 20.12345, 123.45678, 67.89123))
     c.lock.setChecked(True)
     c.fields[0].setValue(10)
@@ -384,9 +440,8 @@ def test_pause_resume_and_interrupt(
     c = controller
     c.paths = [source]
     c.load(0)
-    qtbot.waitUntil(lambda: c.ready and c.end.value() == 8, timeout=15000)
-    if segmented:
-        c.replace_segments([(0, 4), (4, 8)])
+    qtbot.waitUntil(lambda: c.ready and c.player.duration() == 8000, timeout=15000)
+    c.replace_segments([(0, 4), (4, 8)] if segmented else [(0, 8)])
     original = app.Export.arguments
     monkeypatch.setattr(app.Export, "arguments", lambda self: ["-re", *original(self)])
     c.export()
@@ -428,21 +483,20 @@ def test_auto_advance_and_countdown(controller, qtbot, source):
     c = controller
     c.paths = [source, source]
     c.load(0)
-    qtbot.waitUntil(lambda: c.ready and c.end.value() == 8, timeout=15000)
+    qtbot.waitUntil(lambda: c.ready and c.player.duration() == 8000, timeout=15000)
+    c.replace_segments([(0, c.player.duration() / 1000)])
     c.advance.setChecked(True)
     c.auto.setChecked(True)
     c.auto_delay.setValue(30)
     c.export()
     qtbot.waitUntil(lambda: c.index == 1 and c.ready, timeout=15000)
     assert c.count_timer.isActive()
-    assert c.start.value() == 0
-    assert c.end.value() == 8
     c.count_cancelled()
     assert not c.count_timer.isActive()
     c.countdown("export", 1)
     qtbot.waitUntil(lambda: c.running, timeout=5000)
     qtbot.waitUntil(lambda: not c.running, timeout=15000)
-    assert c.progress_text.text() == "Complete — output saved"
+    assert c.progress_text.text() == "Complete — 1 segments saved"
 
 
 @pytest.mark.parametrize(
@@ -481,8 +535,8 @@ def test_anamorphic_view_maps_to_source_pixels(
     c = controller
     c.paths = [path]
     c.load(0)
-    qtbot.waitUntil(lambda: c.ready and c.end.value() >= 1, timeout=15000)
-    c.end.setValue(1)
+    qtbot.waitUntil(lambda: c.ready and c.player.duration() >= 1000, timeout=15000)
+    c.replace_segments([(0, 1)])
     assert c.width == 640
     assert c.fields[2].value() == 320
     c.set_rect((160, 0, 320, 240))
@@ -491,7 +545,7 @@ def test_anamorphic_view_maps_to_source_pixels(
     c.export()
     assert c.job.rect == rect
     qtbot.waitUntil(lambda: not c.running, timeout=15000)
-    assert c.progress_text.text() == "Complete — output saved"
+    assert c.progress_text.text() == "Complete — 1 segments saved"
     result = json.loads(
         subprocess.check_output(
             [
@@ -537,16 +591,16 @@ def test_embedded_rotation_coordinates(controller, qtbot, source, tmp_path):
     c = controller
     c.paths = [path]
     c.load(0)
-    qtbot.waitUntil(lambda: c.ready and c.end.value() >= 1, timeout=15000)
+    qtbot.waitUntil(lambda: c.ready and c.player.duration() >= 1000, timeout=15000)
     assert (c.width, c.height) == (240, 320)
     assert c.video.boundingRect().width() == 240
     assert c.video.boundingRect().height() == 320
     c.window.grab().save(str(tmp_path / "rotated-preview.png"))
     assert (c.fields[2].value(), c.fields[3].value()) == (240, 320)
-    c.end.setValue(1)
+    c.replace_segments([(0, 1)])
     c.export()
     qtbot.waitUntil(lambda: not c.running, timeout=15000)
-    assert c.progress_text.text() == "Complete — output saved"
+    assert c.progress_text.text() == "Complete — 1 segments saved"
 
 
 def test_drop_on_video_viewport(controller, qtbot, source):

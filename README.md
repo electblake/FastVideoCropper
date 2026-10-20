@@ -13,28 +13,33 @@ uv sync
 uv run fastvideocropper
 ```
 
-Open multiple videos with Ctrl+O or drop files on the window. Drag the crop or
-its eight handles; use the numeric fields for keyboard editing. Set In and Out
-at the playhead or enter seconds directly. Export writes `name_CROPPED.ext`
-beside the source and overwrites that output. The source is never overwritten.
+Open multiple videos with Ctrl+O or drop files on the window. Detect segments,
+select one, then drag its crop or its eight handles; use the numeric fields for
+keyboard editing. Export requires segments. The source is never overwritten.
 
 Use **Segment → Detect segments…** (or the button above the crop controls) to
 split the video at scene changes. Adjust the scene threshold (lower detects more
-cuts) and minimum segment length in the dialog. Detection replaces existing
-segments and copies the current crop settings into each new segment.
+cuts) and minimum segment length in the dialog. These preferences are saved in
+QSettings and restored when the dialog is reopened, including after restarting
+the app. Detection replaces existing segments and copies the current crop
+settings into each new segment.
 The progress display reports video time scanned and cuts found. **Cancel detection**
 stops the scan and retains the existing segments. FFmpeg diagnostics appear in
 the Process log.
 
 Select a segment in the right-hand list or click its timeline region to edit its
-In/Out times, crop, rotation, aspect preset, and aspect lock independently.
+crop, rotation, aspect preset, and aspect lock independently.
 **Export segments** writes separate `name_SEGMENT_001_CROPPED.ext`,
 `name_SEGMENT_002_CROPPED.ext`, etc. beside the source, overwriting matching outputs.
 Stop or cancel ends the queue; earlier completed files remain. Cancel deletes the
-current output. **Segment → Clear segments** removes all segments and resets
-In/Out to the full video so detection can be restarted. Segment settings remain
-available when navigating between videos during the session; they are not saved
-as a project when the application closes.
+current output. **Segment → Clear segments** removes all segments and disables
+export until detection creates new segments. Segment settings remain
+available when navigating between videos during the session.
+Export saves the selected crop before starting, selects and scrolls to each segment
+as it is processed, and loads its crop overlay and settings. The preview identifies
+the segment, time range, crop dimensions and position, rotation, and aspect lock.
+Crop editing stays locked during export so the displayed settings match the output.
+Turning off preview updates still loads the starting frame for each segment.
 
 Choose common aspect ratios directly from the 12-button preset grid. The selected
 button stays checked; independent edits that change the ratio clear it to Custom.

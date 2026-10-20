@@ -8,8 +8,6 @@ keyboard. No custom fonts, themes, or widget painting.
 - Multiple-file picker and drag/drop, queue position, previous/next, done state.
 - Qt Multimedia source playback, pause, mute, millisecond position display,
   native scrubber with 250 ms keyboard increments.
-- Full-source initial In/Out, Set In/Out at the playhead, precise time entry,
-  labeled range indicators independent of playback.
 - Scene detection with live scan progress, cancellation, a selectable segment
   list, independent segment crops, and separate numbered exports.
 - Bounded third-party crop dragging and eight resize handles, outside mask,
@@ -18,7 +16,7 @@ keyboard. No custom fonts, themes, or widget painting.
   clockwise/counterclockwise rotation preserving geometry, selection zoom and
   optional pointer-centered wheel zoom.
 - Saved normalized geometry, ratio, center state, rotation and preferences.
-- HEVC export, copied audio, selected time interval, `_CROPPED` output alongside
+- HEVC export, copied audio, segment time intervals, numbered segment output alongside
   the source, overwrite, optional square-pixel normalization.
 - Explicit CPU, NVIDIA, Intel and AMD encoder selection when compiled into
   FFmpeg. NVIDIA device index is exposed. Auto GPU uses Windows device discovery
@@ -39,7 +37,6 @@ keyboard. No custom fonts, themes, or widget painting.
   another device.
 - PyQtGraph supplies its native gesture behavior. Its Ctrl snapping and Alt
   aspect behavior replace the old custom Shift gesture semantics.
-- Native time controls are keyboard editable. No custom time-entry widget.
 - Layout and view changes are immediate, except for a 500 ms resize debounce.
 - Errors from dependencies are not caught, wrapped or retried. Qt/FFmpeg
   diagnostics are shown directly; unsupported exports fail in FFmpeg.
