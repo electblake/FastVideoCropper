@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-20
+
 ### Added
 
 - Added an Add segment button and Segment menu action that created a full-timeline segment only when the segment list was empty, with native status-bar feedback.
@@ -45,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Updated the installed-app smoke test for segment-based trimming, export completion, and isolated configuration paths.
 - Started Auto-run next countdowns after loading and automatic segment creation so new files continued through batch exports.
 - Deferred automatic segment creation outside Qt video-frame callbacks and canceled queued load completion when switching files or closing.
 - Disabled Segments dock controls during application updates.

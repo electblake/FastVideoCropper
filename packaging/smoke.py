@@ -6,7 +6,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QTimer
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from fastvideocropper import app as application
@@ -38,9 +38,7 @@ subprocess.run(
     check=True,
     creationflags=subprocess.CREATE_NO_WINDOW,
 )
-application.QSettings = lambda *args: QSettings(
-    str(Path(workspace.name) / "settings.ini"), QSettings.Format.IniFormat
-)
+application.user_config_path = lambda *args, **kwargs: Path(workspace.name)
 app = QApplication([])
 controller = application.Application(ffmpeg, ffprobe)
 controller.window.show()
@@ -53,14 +51,13 @@ timer = QTimer()
 def step():
     global started
     if controller.ready and not started:
+        controller.replace_segments([(0.2, 1.2)])
         controller.set_rect((20, 20, 160, 120))
         controller.rotate(1)
-        controller.start.setValue(0.2)
-        controller.end.setValue(1.2)
         started = True
-        controller.export()
+        controller.export_with_encoder("libx265")
     elif started and not controller.running:
-        assert controller.progress_text.text() == "Complete — output saved", (
+        assert controller.progress_text.text() == "Complete — 1 segments saved", (
             controller.log.toPlainText()
         )
         streams = json.loads(
