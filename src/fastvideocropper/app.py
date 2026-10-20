@@ -115,6 +115,7 @@ class Application(QObject):
         self.paused = False
         self.outcome = ""
         self.count_action = ""
+        self.auto_export_pending = False
         self.output = None
         self.progress_buffer = ""
         self.progress_values = {}
@@ -174,6 +175,9 @@ class Application(QObject):
         self.count_timer = QTimer(self)
         self.count_timer.setInterval(1000)
         self.count_timer.timeout.connect(self.count_tick)
+        self.load_timer = QTimer(self)
+        self.load_timer.setSingleShot(True)
+        self.load_timer.timeout.connect(self.complete_load)
         self.resize_timer = QTimer(self)
         self.resize_timer.setSingleShot(True)
         self.resize_timer.setInterval(500)
@@ -206,6 +210,9 @@ class Application(QObject):
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
         quit_action.triggered.connect(self.window.close)
         segment_menu = self.window.menuBar().addMenu("&Segment")
+        self.add_segment_action = segment_menu.addAction(
+            "&Add segment", self.add_segment
+        )
         self.detect_action = segment_menu.addAction(
             "&Detect segments…", self.show_scene_detection
         )
@@ -446,7 +453,7 @@ class Application(QObject):
         self.segment_list.setAccessibleName("Video segments")
         self.segment_list.currentRowChanged.connect(self.select_segment)
         segments_layout.addWidget(self.segment_list, 1)
-        self.segment_summary = QLabel("No segments — detect scenes to begin")
+        self.segment_summary = QLabel("No segments — add a segment or detect scenes")
         self.segment_summary.setWordWrap(True)
         segments_layout.addWidget(self.segment_summary)
         segment_buttons = QHBoxLayout()
@@ -457,8 +464,14 @@ class Application(QObject):
             "Clear segments", self.clear_segments, segment_buttons
         )
         segments_layout.addLayout(segment_buttons)
+        self.add_segment_button = self.button(
+            "Add segment", self.add_segment, segments_layout
+        )
         self.split_segment_button = self.button(
             "Split segment", self.split_segment, segments_layout
+        )
+        self.export_button = self.button(
+            "Export segments", self.export, segments_layout
         )
         tabs = self.tabs = QTabWidget()
         right_layout.addWidget(tabs, 1)
@@ -626,11 +639,18 @@ class Application(QObject):
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(2000)
         tabs.addTab(self.log, "Process log")
-        self.export_button = self.button("Export segments", self.export, right_layout)
+        self.remember_crop = QCheckBox("Remember crop settings")
+        self.remember_crop.setToolTip(
+            "Restore the last crop, rotation, aspect preset, aspect lock, and padding "
+            "for new videos. Crop position and size scale with the video dimensions."
+        )
+        self.auto_segment = QCheckBox("Automatically create first segment")
         self.advance = QCheckBox("Load next after completion")
         self.auto = QCheckBox("Auto-run next")
         self.quit_done = QCheckBox("Quit when done")
         for control, key in [
+            (self.remember_crop, "remember_crop"),
+            (self.auto_segment, "auto_segment"),
             (self.advance, "advance"),
             (self.auto, "auto"),
             (self.quit_done, "quit"),
@@ -961,6 +981,31 @@ class Application(QObject):
         )
         self.update_enabled()
 
+    def add_segment(self):
+        if self.segments:
+            self.window.statusBar().showMessage(
+                "No segment added — segments already exist"
+            )
+            return
+        self.count_cancelled()
+        self.player.pause()
+        x, y, w, h = self.rect()
+        self.segments.append(
+            Segment(
+                0.0,
+                self.player.duration() / 1000,
+                (x / self.width, y / self.height, w / self.width, h / self.height),
+                self.turns,
+                self.selected_preset,
+                self.lock.isChecked(),
+                *(field.value() for field in self.padding_fields),
+            )
+        )
+        self.refresh_segments()
+        self.segment_list.setCurrentRow(0)
+        self.update_enabled()
+        self.window.statusBar().showMessage("Added segment covering the full timeline")
+
     def split_segment(self):
         self.count_cancelled()
         self.player.pause()
@@ -1058,7 +1103,7 @@ class Application(QObject):
             )
             self.export_button.setText(f"Export {len(self.segments)} segments")
         else:
-            self.segment_summary.setText("No segments — detect scenes to begin")
+            self.segment_summary.setText("No segments — add a segment or detect scenes")
             self.export_button.setText("Export segments")
 
     def save_segment(self):
@@ -1172,9 +1217,24 @@ class Application(QObject):
             self.paths = [Path(p) for p in paths]
             self.load(0)
 
+    def save_crop_settings(self):
+        x, y, w, h = self.rect()
+        self.settings.setValue(
+            "crop/rect",
+            QRectF(x / self.width, y / self.height, w / self.width, h / self.height),
+        )
+        self.settings.setValue("crop/turns", self.turns)
+        self.settings.setValue("crop/preset", self.selected_preset)
+        self.settings.setValue("crop/locked", self.lock.isChecked())
+        self.settings.setValue("crop/padding_x", self.padding_fields[0].value())
+        self.settings.setValue("crop/padding_y", self.padding_fields[1].value())
+
     def load(self, index):
+        self.load_timer.stop()
         self.count_cancelled()
         self.save_segment()
+        if self.ready:
+            self.save_crop_settings()
         self.active_segment = -1
         self.segments = self.source_segments.setdefault(self.paths[index], [])
         self.refresh_segments()
@@ -1237,6 +1297,26 @@ class Application(QObject):
         self.apply_rotation()
         self.roi.maxBounds = QRectF(0, 0, self.width, self.height)
         self.set_rect((0, 0, self.width, self.height))
+        if (
+            self.remember_crop.isChecked()
+            and not self.segments
+            and self.settings.contains("crop/rect")
+        ):
+            self.rotate(self.settings.value("crop/turns", type=int))
+            for field, key in zip(self.padding_fields, ("padding_x", "padding_y")):
+                field.setValue(self.settings.value(f"crop/{key}", type=int))
+            rect = self.settings.value("crop/rect", type=QRectF)
+            self.set_rect(
+                (
+                    rect.x() * self.width,
+                    rect.y() * self.height,
+                    rect.width() * self.width,
+                    rect.height() * self.height,
+                )
+            )
+            self.set_preset(self.settings.value("crop/preset", type=str))
+            self.apply_preset()
+            self.lock.setChecked(self.settings.value("crop/locked", type=bool))
         self.ready = True
         self.loading = False
         self.progress_text.setText("Ready")
@@ -1246,7 +1326,16 @@ class Application(QObject):
 
         if self.segments:
             self.segment_list.setCurrentRow(0)
+        self.load_timer.start(0)
         self.update_enabled()
+
+    def complete_load(self):
+        auto_export = self.auto_export_pending
+        self.auto_export_pending = False
+        if self.auto_segment.isChecked():
+            self.add_segment()
+        if auto_export and self.segments:
+            self.countdown("export", self.auto_delay.value())
 
     def frame_changed(self, frame):
         self.seek_pending = False
@@ -1452,6 +1541,8 @@ class Application(QObject):
     def choose_preset(self, button):
         self.set_preset(button.text())
         self.apply_preset()
+        if ":" in button.text():
+            self.center()
 
     def apply_preset(self):
         name = self.selected_preset
@@ -1817,8 +1908,7 @@ class Application(QObject):
                 QApplication.alert(self.window)
             if self.advance.isChecked() and self.index + 1 < len(self.paths):
                 self.load(self.index + 1)
-                if self.auto.isChecked() and self.segments:
-                    self.countdown("export", self.auto_delay.value())
+                self.auto_export_pending = self.auto.isChecked()
             elif self.quit_done.isChecked():
                 self.countdown("quit", self.quit_delay.value())
         self.update_enabled()
@@ -1852,6 +1942,7 @@ class Application(QObject):
             self.export()
 
     def count_cancelled(self):
+        self.auto_export_pending = False
         self.count_timer.stop()
         self.count_label.clear()
         self.count_now.hide()
@@ -1862,6 +1953,8 @@ class Application(QObject):
         self.update_navigation()
         self.update_crop_summary()
         busy = self.running or self.loading or self.resolving_encoder
+        self.add_segment_action.setEnabled(self.ready and not busy)
+        self.add_segment_button.setEnabled(self.ready and not busy)
         self.detect_action.setEnabled(self.ready and not busy)
         self.detect_button.setEnabled(self.ready and not busy)
         self.detect_crop_action.setEnabled(
@@ -1914,6 +2007,7 @@ class Application(QObject):
     def update_busy(self, busy):
         self.explorer_dialog.setEnabled(not busy)
         self.window.centralWidget().setEnabled(not busy)
+        self.segments_dock.setEnabled(not busy)
         self.window.menuBar().setEnabled(not busy)
         self.window.setAcceptDrops(not busy)
 
@@ -2001,6 +2095,9 @@ class Application(QObject):
                 self.resize_timer.stop()
                 self.follow_timer.stop()
                 self.count_timer.stop()
+                self.load_timer.stop()
+                if self.ready:
+                    self.save_crop_settings()
                 self.player.stop()
                 self.player.setSource(QUrl())
                 self.settings.setValue(

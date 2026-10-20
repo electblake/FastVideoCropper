@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added an Add segment button and Segment menu action that created a full-timeline segment only when the segment list was empty, with native status-bar feedback.
+- Added Remember crop settings with QSettings persistence for crop geometry, rotation, aspect preset, aspect lock, and pixel padding across files and sessions.
+- Added Automatically create first segment after loading and restoring crop settings, while preserving existing segments.
 - Added signed per-segment X/Y pixel padding with a dashed output outline, matching preview masks, and pixel-accurate exports.
 - Added crop-border detection with persisted FFmpeg options and half/third frame presets.
 - Added playback controls for video ends, adjacent segments, and one-second seeking.
@@ -22,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Moved Export segments to the bottom of the Segments dock.
+- Centered crops horizontally and vertically after selecting an X:Y aspect-ratio preset, while preserving saved crop positions when restored.
 - Asked for confirmation before replacing existing segments with scene detection results.
 - Advanced the video preview with scene-detection progress when Preview while processing was enabled.
 - Saved window geometry, dock placement, floating state, visibility, and splitter sizes under the `mainWindow` QSettings group.
@@ -40,6 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Started Auto-run next countdowns after loading and automatic segment creation so new files continued through batch exports.
+- Deferred automatic segment creation outside Qt video-frame callbacks and canceled queued load completion when switching files or closing.
+- Disabled Segments dock controls during application updates.
 - Restored crop detection controls after returning to videos with saved segments.
 - Matched segment navigation, scrubber selection, and split controls to rounded player timestamps at fractional-millisecond boundaries.
 - Reset pixel padding for newly opened videos while restoring saved segment padding when returning to a video.

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QMessageBox,
     QSpinBox,
+    QStatusBar,
 )
 
 from fastvideocropper import app
@@ -28,6 +29,266 @@ def controller(qtbot, tmp_path, monkeypatch):
     controller.window.show()
     yield controller
     controller.window.close()
+
+
+@pytest.mark.parametrize("trigger", ["button", "menu"])
+def test_add_full_timeline_segment(controller, qtbot, source, trigger):
+    c = controller
+    status = c.window.statusBar()
+    assert type(status) is QStatusBar
+    assert status.isVisible() and status.isEnabled()
+    assert not c.add_segment_button.isEnabled()
+    assert not c.add_segment_action.isEnabled()
+    segment_menu = next(
+        action.menu()
+        for action in c.window.menuBar().actions()
+        if action.text() == "&Segment"
+    )
+    assert c.add_segment_action in segment_menu.actions()
+    dock_layout = c.segments_dock.widget().layout()
+    assert dock_layout.itemAt(dock_layout.count() - 1).widget() is c.export_button
+    assert c.segments_dock.isAncestorOf(c.add_segment_button)
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    for state in ("loading", "running", "resolving_encoder"):
+        setattr(c, state, True)
+        c.update_enabled()
+        assert not c.add_segment_button.isEnabled()
+        assert not c.add_segment_action.isEnabled()
+        setattr(c, state, False)
+    c.update_enabled()
+    c.seek_segment(3000)
+    if trigger == "button":
+        qtbot.mouseClick(c.add_segment_button, Qt.MouseButton.LeftButton)
+    else:
+        c.add_segment_action.trigger()
+    assert [(s.start, s.end) for s in c.segments] == [(0, 8)]
+    assert c.source_segments[source] is c.segments
+    assert c.segment_list.count() == len(c.segment_regions) == 1
+    assert c.segment_regions[0].getRegion() == (0, 8)
+    assert c.active_segment == c.segment_list.currentRow() == 0
+    assert c.rect() == (0, 0, 320, 240)
+    assert c.crop_page.isEnabled() and c.export_button.isEnabled()
+    assert status.currentMessage() == "Added segment covering the full timeline"
+    assert c.progress_text.text() == "Ready"
+    c.set_rect((20, 30, 160, 120))
+    c.seek_segment(3000)
+    c.split_segment_action.trigger()
+    originals = list(c.segments)
+    if trigger == "button":
+        qtbot.mouseClick(c.add_segment_button, Qt.MouseButton.LeftButton)
+    else:
+        c.add_segment_action.trigger()
+    assert c.segments == originals
+    assert all(a is b for a, b in zip(c.segments, originals))
+    assert c.active_segment == 1
+    assert c.player.position() == 3000
+    assert c.rect() == (20, 30, 160, 120)
+    assert status.currentMessage() == "No segment added — segments already exist"
+    c.clear_segments_action.trigger()
+    c.add_segment_button.click()
+    assert [(s.start, s.end) for s in c.segments] == [(0, 8)]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert [(s.start, s.end) for s in c.segments] == [(0, 8)]
+    c.update_busy(True)
+    assert not c.add_segment_button.isEnabled()
+    assert not c.export_button.isEnabled()
+    c.update_busy(False)
+    assert c.add_segment_button.isEnabled() and c.export_button.isEnabled()
+
+
+@pytest.mark.parametrize("remember", [False, True])
+@pytest.mark.parametrize("trigger", ["open", "next", "export_complete"])
+def test_automatically_create_first_segment(
+    controller, qtbot, source, tmp_path, monkeypatch, remember, trigger
+):
+    c = controller
+    other = tmp_path / "next.mp4"
+    other.write_bytes(source.read_bytes())
+    assert not c.auto_segment.isChecked()
+    c.paths = [source, other]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert not c.segments
+    c.auto_segment.setChecked(True)
+    assert not c.segments
+    c.remember_crop.setChecked(remember)
+    c.add_segment_button.click()
+    c.rotate(1)
+    c.set_rect((20, 30, 120, 120))
+    c.set_preset("Square")
+    c.lock.setChecked(True)
+    c.padding_fields[0].setValue(7)
+    c.padding_fields[1].setValue(-3)
+    if trigger == "open":
+        monkeypatch.setattr(
+            app.QFileDialog, "getOpenFileNames", lambda *args: ([str(other)], "")
+        )
+        c.open_action.trigger()
+    elif trigger == "next":
+        c.next.click()
+    else:
+        c.advance.setChecked(True)
+        c.export_with_encoder("libx265")
+    qtbot.waitUntil(
+        lambda: c.ready and c.paths[c.index] == other and bool(c.segments),
+        timeout=30000,
+    )
+    assert [(s.start, s.end) for s in c.segments] == [(0, 8)]
+    assert c.rect() == ((20, 30, 120, 120) if remember else (0, 0, 320, 240))
+    assert c.segments[0].turns == (1 if remember else 0)
+    assert c.segments[0].preset == ("Square" if remember else "Custom")
+    assert c.segments[0].locked == remember
+    assert (c.segments[0].padding_x, c.segments[0].padding_y) == (
+        (7, -3) if remember else (0, 0)
+    )
+    assert c.segments[0].rect == (
+        (20 / 240, 30 / 320, 120 / 240, 120 / 320) if remember else (0, 0, 1, 1)
+    )
+    assert c.segment_list.count() == len(c.segment_regions) == 1
+    assert c.active_segment == c.segment_list.currentRow() == 0
+    assert c.export_button.isEnabled()
+    assert (
+        c.window.statusBar().currentMessage()
+        == "Added segment covering the full timeline"
+    )
+    segment = c.segments[0]
+    c.load(c.index)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert c.segments == [segment]
+    assert c.segments[0] is segment
+    assert (
+        c.window.statusBar().currentMessage()
+        == "No segment added — segments already exist"
+    )
+    c.window.close()
+
+    restored = app.Application()
+    qtbot.addWidget(restored.window)
+    restored.window.show()
+    assert restored.auto_segment.isChecked()
+    restored.paths = [other]
+    restored.load(0)
+    qtbot.waitUntil(lambda: restored.ready, timeout=15000)
+    assert [(s.start, s.end) for s in restored.segments] == [(0, 8)]
+    restored.clear_segments_button.click()
+    restored.auto_segment.setChecked(False)
+    restored.load(0)
+    qtbot.waitUntil(lambda: restored.ready, timeout=15000)
+    assert not restored.segments
+    assert not restored.settings.value("auto_segment", type=bool)
+    restored.window.close()
+
+
+@pytest.mark.parametrize("remember", [False, True])
+def test_remember_crop_between_files_and_sessions(
+    controller, qtbot, source, tmp_path, remember
+):
+    c = controller
+    other = tmp_path / "next.mp4"
+    other.write_bytes(source.read_bytes())
+    layout = c.advance.parentWidget().layout()
+    assert layout.indexOf(c.remember_crop) + 1 == layout.indexOf(c.auto_segment)
+    assert layout.indexOf(c.auto_segment) + 1 == layout.indexOf(c.advance)
+    assert not c.remember_crop.isChecked()
+    c.remember_crop.setChecked(remember)
+    c.paths = [source, other]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.add_segment_button.click()
+    c.rotate(1)
+    c.set_rect((20, 30, 120, 120))
+    c.set_preset("Square")
+    c.lock.setChecked(True)
+    c.padding_fields[0].setValue(7)
+    c.padding_fields[1].setValue(-3)
+    c.next.click()
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert c.settings.value("remember_crop", type=bool) == remember
+    assert c.settings.value("crop/turns", type=int) == 1
+    assert c.settings.value("crop/preset") == "Square"
+    assert c.settings.value("crop/locked", type=bool)
+    assert c.settings.value("crop/padding_x", type=int) == 7
+    assert c.settings.value("crop/padding_y", type=int) == -3
+    assert not c.segments
+    assert c.rect() == ((20, 30, 120, 120) if remember else (0, 0, 320, 240))
+    assert c.turns == (1 if remember else 0)
+    assert c.selected_preset == ("Square" if remember else "Custom")
+    assert c.lock.isChecked() == remember
+    assert [f.value() for f in c.padding_fields] == ([7, -3] if remember else [0, 0])
+    c.add_segment_button.click()
+    assert c.segments[0].turns == c.turns
+    assert c.segments[0].padding_x == (7 if remember else 0)
+    c.set_rect((0, 0, 60, 60))
+    c.previous.click()
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert c.rect() == (20, 30, 120, 120)
+    assert c.turns == 1
+    c.window.close()
+
+    restored = app.Application()
+    qtbot.addWidget(restored.window)
+    restored.window.show()
+    assert restored.remember_crop.isChecked() == remember
+    restored.paths = [other]
+    restored.load(0)
+    qtbot.waitUntil(lambda: restored.ready, timeout=15000)
+    assert restored.rect() == ((20, 30, 120, 120) if remember else (0, 0, 320, 240))
+    assert restored.turns == (1 if remember else 0)
+    assert restored.selected_preset == ("Square" if remember else "Custom")
+    assert restored.lock.isChecked() == remember
+    assert [f.value() for f in restored.padding_fields] == (
+        [7, -3] if remember else [0, 0]
+    )
+    restored.window.close()
+
+
+def test_remember_crop_different_dimensions_and_disable(
+    controller, qtbot, source, tmp_path
+):
+    other = tmp_path / "wide.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=640x360:rate=10:duration=1",
+            "-c:v",
+            "libx264",
+            str(other),
+        ],
+        check=True,
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+    c = controller
+    c.remember_crop.setChecked(True)
+    c.paths = [source, other]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.add_segment_button.click()
+    c.rotate(1)
+    c.set_rect((20, 30, 120, 120))
+    c.set_preset("Square")
+    c.lock.setChecked(True)
+    c.next.click()
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert c.rect() == (30, 60, 180, 180)
+    assert c.selected_preset == "Square"
+    assert c.turns == 1 and c.lock.isChecked()
+    c.add_segment_button.click()
+    assert c.segments[0].rect == (30 / 360, 60 / 640, 180 / 360, 180 / 640)
+    c.clear_segments_button.click()
+    c.remember_crop.setChecked(False)
+    c.load(1)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert c.rect() == (0, 0, 640, 360)
+    assert c.turns == 0 and not c.lock.isChecked()
+    assert c.selected_preset == "Custom"
 
 
 def test_pixel_padding_segments_preview_and_export(controller, qtbot, source, tmp_path):
@@ -482,6 +743,56 @@ def test_gpu_probe_keeps_event_loop_responsive(controller, qtbot, source, monkey
     assert not c.resolving_encoder
 
 
+@pytest.mark.parametrize("turns", [0, 1, 2, 3])
+def test_ratio_presets_center_and_preserve_saved_position(
+    controller, qtbot, source, tmp_path, turns
+):
+    c = controller
+    other = tmp_path / "next.mp4"
+    other.write_bytes(source.read_bytes())
+    c.paths = [source, other]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 4), (4, 8)])
+    c.rotate(turns)
+    for locked in (False, True):
+        c.lock.setChecked(locked)
+        for name, ratio in app.RATIOS.items():
+            if ":" not in name:
+                continue
+            c.set_rect((10, 20, 160, 120))
+            qtbot.mouseClick(c.preset_buttons[name], Qt.MouseButton.LeftButton)
+            x, y, w, h = c.rect()
+            assert w / h == pytest.approx(ratio)
+            assert max(w / 160, h / 120) == pytest.approx(1)
+            assert x + w / 2 == pytest.approx(c.width / 2)
+            assert y + h / 2 == pytest.approx(c.height / 2)
+            assert c.selected_preset == name
+            assert c.lock.isChecked() == locked
+            assert c.segments[0].rect == pytest.approx(
+                (x / c.width, y / c.height, w / c.width, h / c.height)
+            )
+    c.preset_buttons["9:16"].setFocus()
+    c.set_rect((10, 20, 160, 120))
+    qtbot.keyClick(c.preset_buttons["9:16"], Qt.Key.Key_Space)
+    assert c.rect() == pytest.approx(
+        ((c.width - 67.5) / 2, (c.height - 120) / 2, 67.5, 120)
+    )
+    c.set_rect((10, 20, 67.5, 120))
+    c.segment_list.setCurrentRow(1)
+    c.segment_list.setCurrentRow(0)
+    assert c.rect() == pytest.approx((10, 20, 67.5, 120))
+    assert c.selected_preset == "9:16"
+    c.apply_preset()
+    assert c.rect() == pytest.approx((10, 20, 67.5, 120))
+    c.load(1)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert c.rect() == pytest.approx((10, 20, 67.5, 120))
+    assert c.selected_preset == "9:16"
+
+
 def test_numeric_lock_and_preset(controller, qtbot, source):
     c = controller
     c.paths = [source]
@@ -633,6 +944,53 @@ def test_pause_resume_and_interrupt(
     else:
         assert c.progress_text.text() == "Canceled — output deleted"
         assert not c.job.output.exists()
+
+
+def test_queued_segment_creation_stops_on_load_and_close(controller, qtbot, source):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready and not c.load_timer.isActive(), timeout=15000)
+    c.auto_segment.setChecked(True)
+    c.load_timer.start(0)
+    c.load(0)
+    assert not c.load_timer.isActive()
+    assert not c.segments
+    qtbot.waitUntil(lambda: c.ready and bool(c.segments), timeout=15000)
+    c.clear_segments_button.click()
+    c.load_timer.start(0)
+    c.window.close()
+    assert not c.load_timer.isActive()
+    qtbot.wait(20)
+    assert not c.segments
+
+
+def test_auto_advance_with_automatic_segment(controller, qtbot, source, tmp_path):
+    c = controller
+    other = tmp_path / "next.mp4"
+    other.write_bytes(source.read_bytes())
+    c.remember_crop.setChecked(True)
+    c.auto_segment.setChecked(True)
+    c.advance.setChecked(True)
+    c.auto.setChecked(True)
+    c.auto_delay.setValue(30)
+    c.paths = [source, other]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready and bool(c.segments), timeout=15000)
+    assert not c.count_timer.isActive()
+    c.set_rect((20, 30, 160, 120))
+    c.export_with_encoder("libx265")
+    qtbot.waitUntil(
+        lambda: c.index == 1 and c.ready and bool(c.segments), timeout=30000
+    )
+    assert c.rect() == (20, 30, 160, 120)
+    assert c.count_timer.isActive()
+    assert c.count_action == "export"
+    c.count_execute()
+    qtbot.waitUntil(lambda: not c.running, timeout=30000)
+    assert c.done == {source, other}
+    assert c.export_jobs[0].source == other
+    assert c.export_jobs[0].rect == (20, 30, 160, 120)
 
 
 def test_auto_advance_and_countdown(controller, qtbot, source):
