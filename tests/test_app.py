@@ -1191,6 +1191,73 @@ def test_preview_after_repeated_completed_runs(
         )
 
 
+def test_preview_switches_dimensions_and_rotation_after_unload(
+    controller, qtbot, source, tmp_path
+):
+    other = tmp_path / "wide.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=white:s=160x90:r=10:d=3",
+            "-c:v",
+            "libx264",
+            str(other),
+        ],
+        check=True,
+        capture_output=True,
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+    c = controller
+    c.paths = [source, other]
+    c.auto_segment.setChecked(True)
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready and bool(c.segments), timeout=15000)
+    c.rotate(1)
+    c.set_rect((20, 30, 120, 160))
+    for _ in range(3):
+        c.select_none_button.click()
+        c.file_list.setCurrentRow(1)
+        qtbot.waitUntil(lambda: c.ready and bool(c.segments), timeout=15000)
+        assert (c.width, c.height, c.pixel_width, c.pixel_height) == (160, 90, 160, 90)
+        assert c.rotation == 0
+        assert c.rect() == (0, 0, 160, 90)
+        assert c.video.boundingRect().size() == app.QRectF(0, 0, 160, 90).size()
+        c.play.click()
+        qtbot.waitUntil(lambda: c.player.position() >= 500, timeout=5000)
+        c.play.click()
+        qtbot.waitUntil(
+            lambda: c.video.videoSink().videoFrame().startTime() >= 400000,
+            timeout=5000,
+        )
+        center = c.graphics.mapFromScene(
+            c.video.mapToScene(c.video.boundingRect().center())
+        )
+        qtbot.waitUntil(
+            lambda center=center: (
+                c.viewport.grab().toImage().pixelColor(center).red() > 200
+            ),
+            timeout=5000,
+        )
+        c.file_list.setCurrentRow(0)
+        qtbot.waitUntil(lambda: c.ready, timeout=15000)
+        assert (c.width, c.height, c.pixel_width, c.pixel_height) == (
+            240,
+            320,
+            240,
+            320,
+        )
+        assert c.rotation == 1
+        assert c.rect() == (20, 30, 120, 160)
+        assert other.resolve() not in {
+            Path(file.path).resolve() for file in psutil.Process().open_files()
+        }
+
+
 @pytest.mark.parametrize(
     "code,status",
     [(1, app.QProcess.ExitStatus.NormalExit), (0, app.QProcess.ExitStatus.CrashExit)],

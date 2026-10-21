@@ -6,6 +6,8 @@ keyboard. No custom fonts, themes, or widget painting.
 ## Implemented
 
 - Multiple-file picker and drag/drop, queue position, previous/next, done state.
+- Explicit Select none and Clear files controls; unloading preserves the list and
+  cached segments, while clearing removes them. Switching releases the old source.
 - Qt Multimedia source playback, pause, mute, millisecond position display,
   native scrubber with 250 ms keyboard increments.
 - Scene detection with live scan progress, cancellation, a selectable segment
@@ -23,7 +25,7 @@ keyboard. No custom fonts, themes, or widget painting.
   FFmpeg. NVIDIA device index is exposed. Auto GPU uses Windows device discovery
   and encoder availability, preferring NVIDIA, Intel, then AMD without retries.
 - Asynchronous progress, FPS, speed, ETA and source-processing preview at 500 ms
-  intervals with one pending seek.
+  intervals without waiting for frame callbacks between seeks.
 - Pause/resume, stop with FFmpeg finalization, cancel and delete, locate output.
 - Optional completion beep/taskbar attention, next-file advance, auto-run and
   quit countdowns with cancellation.
@@ -64,7 +66,12 @@ reciprocal selection after rotation, restoration on load, and clearing to Custom
 Position edits preserve unedited fractional dimensions instead of rounding them.
 Segment tests cover real scene boundaries, partial log records, retained trim
 precision, independent crops, numbered exports, progress without scene changes,
-and cancellation without replacing segments or deleting prior exports.
+and cancellation without deleting prior exports. Detection restores a default
+segment when enabled and the timeline is empty after cancellation or failure.
+File-lifecycle checks cover repeated exports followed by list selection, opening,
+and dropping new files; they inspect decoded frames and rendered preview pixels.
+They also verify file-handle release, deselection, clearing, saved crops, playback,
+and repeated switching between different video dimensions and rotations.
 Metadata and GPU discovery tests verify that the Qt event loop stays responsive.
 Square-pixel export and anamorphic preview-to-source coordinate mapping are
 also exercised with real media, both before and after rotation. Embedded display

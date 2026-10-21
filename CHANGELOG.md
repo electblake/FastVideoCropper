@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.8] - 2026-10-21
+
 ### Added
 
 - Added Select none and Clear files buttons at the bottom of the Files dock.
+- Added regression checks for repeated runs, rendered previews, file release, and switching video dimensions and rotations after unloading.
 
 ### Fixed
 

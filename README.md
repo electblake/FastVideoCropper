@@ -26,8 +26,16 @@ QSettings and restored when the dialog is reopened, including after restarting
 the app. Detection asks before clearing existing segments and copies the current crop
 settings into each new segment.
 The progress display reports video time scanned and cuts found. **Cancel detection**
-stops the scan; segments cleared by a confirmed replacement remain cleared. FFmpeg diagnostics appear in
+stops the scan. If Automatically create first segment is enabled and detection
+ends without segments, the app creates a full-timeline segment. FFmpeg diagnostics appear in
 the Process log.
+
+The **Files** panel retains the list and each video's segment crops when the final
+file finishes with **Load next after completion** enabled. The current video is
+unloaded to release the file. **Select none** also unloads the current video while
+keeping the list; click a file to load it again. **Clear files** unloads the video
+and removes the list, completion markers, and cached segments. Switching files
+releases the previous video before loading the next preview.
 
 Application preferences use QSettings in `settings.ini` under platformdirs' user
 config directory (`%LOCALAPPDATA%\FastVideoCropper` on Windows). Detection options,
@@ -101,7 +109,7 @@ See [component decisions](docs/components.md) and [coverage](docs/coverage.md).
 
 ## Windows installer
 
-Release 0.7.2 provides a small per-user Windows x64 online Setup executable.
+Release 0.7.8 provides a small per-user Windows x64 online Setup executable.
 It downloads uv, Python, the locked Qt/Python dependencies, FFmpeg and FFprobe.
 Installation requires Internet access; the installed app runs offline.
 See [release build instructions](packaging/README.md)

@@ -44,13 +44,13 @@ controller = application.Application(ffmpeg, ffprobe)
 controller.window.show()
 controller.paths = [source]
 controller.load(0)
-started = False
+phase = "load"
 timer = QTimer()
 
 
 def step():
-    global started
-    if controller.ready and not started:
+    global phase
+    if controller.ready and phase == "load":
         controller.replace_segments([(0.2, 0.7), (0.7, 1.2)])
         controller.segment_list.setCurrentRow(1)
         controller.merge_segments_button.click()
@@ -76,9 +76,10 @@ def step():
         assert controller.rect() == (80, 0, 160, 240)
         controller.set_rect((20, 20, 160, 120))
         controller.rotate(1)
-        started = True
+        controller.advance.setChecked(True)
+        phase = "export"
         controller.export_with_encoder("libx265")
-    elif started and not controller.running:
+    elif phase == "export" and not controller.running:
         assert (
             controller.window.statusBar().currentMessage()
             == "Complete — 1 segments saved"
@@ -101,6 +102,23 @@ def step():
         assert int(streams[0]["nb_frames"]) == 10
         assert streams[0]["codec_name"] == "hevc"
         assert streams[1]["codec_name"] == "aac"
+        assert controller.paths == [source]
+        assert controller.index == controller.file_list.currentRow() == -1
+        assert controller.player.source().isEmpty()
+        assert not controller.video.videoSink().videoFrame().isValid()
+        controller.file_list.setCurrentRow(0)
+        phase = "reload"
+    elif phase == "reload" and controller.ready:
+        assert controller.rotation == 1
+        assert controller.video.videoSink().videoFrame().isValid()
+        assert controller.view.opacity() == 1
+        assert controller.view.sceneBoundingRect().width() > 100
+        assert controller.export_button.isEnabled()
+        controller.select_none_button.click()
+        assert controller.paths == [source]
+        assert controller.player.source().isEmpty()
+        controller.clear_files_button.click()
+        assert not controller.paths and not controller.source_segments
         Path(sys.argv[1]).write_text(
             json.dumps(
                 {
@@ -113,6 +131,7 @@ def step():
                     "presets": "Three cycles retained full-frame crop dimensions",
                     "half_center": "Matched a half crop followed by Center frame",
                     "audio": "aac",
+                    "file_lifecycle": "Export unloaded video; retained file reloaded with preview; Select none and Clear files released it",
                 },
                 indent=2,
             )
