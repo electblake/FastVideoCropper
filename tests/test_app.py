@@ -1032,12 +1032,11 @@ def test_final_export_unloads_video(
     assert c.window.statusBar().currentMessage() == "Complete — 2 segments saved"
     assert c.player.source().isEmpty() == advance
     assert c.ready == (not advance)
-    assert c.view.isVisible() == (not advance)
+    assert c.view.opacity() == (0 if advance else 1)
     assert c.export_button.isEnabled() == (not advance)
     assert c.count_timer.isActive() == quit_done
-    assert c.file_list.count() == (0 if advance else 1)
-    if not advance:
-        assert c.file_list.item(0).text() == f"{source.name}\nDone"
+    assert c.file_list.count() == 1
+    assert c.file_list.item(0).text() == f"{source.name}\nDone"
     if quit_done:
         assert c.count_action == "quit"
         assert c.count_now.isEnabled()
@@ -1047,7 +1046,9 @@ def test_final_export_unloads_video(
         assert source.resolve() not in {
             Path(file.path).resolve() for file in psutil.Process().open_files()
         }
-        assert not c.paths
+        assert c.paths == [source]
+        assert c.index == c.file_list.currentRow() == -1
+        assert not c.file_list.selectedItems()
         assert not c.segments
         assert c.active_segment == -1
         assert c.segment_list.count() == 0
@@ -1056,12 +1057,138 @@ def test_final_export_unloads_video(
         assert len(c.source_segments[source]) == 2
         renamed = source.rename(tmp_path / "released.mp4")
         renamed.rename(source)
-        c.paths = [source]
-        c.load(0)
+        c.file_list.setCurrentRow(0)
         qtbot.waitUntil(lambda: c.ready, timeout=15000)
         assert c.view.isVisible()
         assert len(c.segments) == 2
         assert c.export_button.isEnabled()
+
+
+@pytest.mark.parametrize("deselect", ["button", "selection"])
+def test_unload_keeps_files_and_releases_source(
+    controller, qtbot, source, tmp_path, deselect
+):
+    c = controller
+    other = tmp_path / "other.mp4"
+    other.write_bytes(source.read_bytes())
+    c.paths = [source, other]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 8)])
+    c.set_rect((20, 30, 160, 120))
+    c.player.play()
+    c.countdown("export", 30)
+    if deselect == "button":
+        c.select_none_button.click()
+    else:
+        c.file_list.setCurrentRow(-1)
+    assert c.paths == [source, other]
+    assert c.file_list.count() == 2
+    assert c.index == c.file_list.currentRow() == -1
+    assert not c.file_list.selectedItems()
+    assert c.file_summary.text() == "2 files — no video selected"
+    assert not c.ready and not c.loading
+    assert c.player.source().isEmpty()
+    assert not c.video.videoSink().videoFrame().isValid()
+    assert c.view.opacity() == 0
+    assert not c.segments and c.segment_list.count() == 0
+    assert not c.count_timer.isActive()
+    assert not c.load_timer.isActive()
+    assert not c.follow_timer.isActive()
+    assert not c.export_button.isEnabled()
+    assert not c.select_none_button.isEnabled()
+    assert c.clear_files_button.isEnabled()
+    assert source.resolve() not in {
+        Path(file.path).resolve() for file in psutil.Process().open_files()
+    }
+    c.file_list.setCurrentRow(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert c.rect() == (20, 30, 160, 120)
+    c.file_list.setCurrentRow(1)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert source.resolve() not in {
+        Path(file.path).resolve() for file in psutil.Process().open_files()
+    }
+    c.done.add(source)
+    c.clear_files_button.click()
+    assert not c.paths and not c.source_segments and not c.done
+    assert c.index == c.file_list.currentRow() == -1
+    assert c.file_list.count() == 0
+    assert not c.ready and c.player.source().isEmpty()
+    assert not c.clear_files_button.isEnabled()
+    assert other.resolve() not in {
+        Path(file.path).resolve() for file in psutil.Process().open_files()
+    }
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert not c.segments
+    assert c.view.opacity() == 1
+    assert c.video.videoSink().videoFrame().isValid()
+
+
+@pytest.mark.parametrize("reopen", ["selection", "open", "drop"])
+def test_preview_after_repeated_completed_runs(
+    controller, qtbot, source, scene_video, tmp_path, monkeypatch, reopen
+):
+    c = controller
+    c.paths = [source, scene_video]
+    c.advance.setChecked(True)
+    c.load(1)
+    for run in range(2):
+        qtbot.waitUntil(lambda: c.ready and not c.load_timer.isActive(), timeout=15000)
+        c.replace_segments([(0, 0.5)])
+        c.export_with_encoder("libx265")
+        qtbot.waitUntil(lambda: not c.running, timeout=30000)
+        assert c.player.source().isEmpty()
+        assert c.index == c.file_list.currentRow() == -1
+        assert c.paths[-1] == scene_video
+        if reopen != "selection":
+            new_video = tmp_path / f"next-{run}.mp4"
+            new_video.write_bytes(scene_video.read_bytes())
+            scene_video = new_video
+        if reopen == "selection":
+            c.file_list.setCurrentRow(len(c.paths) - 1)
+        elif reopen == "open":
+            monkeypatch.setattr(
+                app.QFileDialog,
+                "getOpenFileNames",
+                lambda *args, path=scene_video: ([str(path)], ""),
+            )
+            c.open_button.click()
+        else:
+            mime = QMimeData()
+            mime.setUrls([QUrl.fromLocalFile(str(scene_video))])
+            drop = QDropEvent(
+                QPointF(20, 20),
+                Qt.DropAction.CopyAction,
+                mime,
+                Qt.MouseButton.LeftButton,
+                Qt.KeyboardModifier.NoModifier,
+            )
+            c.eventFilter(c.window, drop)
+            assert drop.isAccepted()
+        qtbot.waitUntil(lambda: c.ready, timeout=15000)
+        c.clear_segments()
+        c.player.setPosition(2500)
+        qtbot.waitUntil(
+            lambda: (
+                c.video.videoSink().videoFrame().isValid()
+                and c.video.videoSink().videoFrame().startTime() >= 2400000
+            ),
+            timeout=15000,
+        )
+        assert c.view.isVisible() and c.video.isVisible()
+        assert not c.video.videoSink().videoFrame().toImage().isNull()
+        center = c.graphics.mapFromScene(
+            c.video.mapToScene(c.video.boundingRect().center())
+        )
+        qtbot.waitUntil(
+            lambda center=center: (
+                c.viewport.grab().toImage().pixelColor(center).red() > 200
+            ),
+            timeout=15000,
+        )
 
 
 @pytest.mark.parametrize(
@@ -2339,6 +2466,8 @@ def test_files_selection_and_replacement(
         setattr(c, state, True)
         c.update_enabled()
         assert not c.file_list.isEnabled()
+        assert not c.select_none_button.isEnabled()
+        assert not c.clear_files_button.isEnabled()
         setattr(c, state, False)
     c.update_enabled()
     c.update_busy(True)
@@ -2361,7 +2490,15 @@ def test_files_dock_persistence_and_reset(controller, qtbot, placement):
     dock = c.files_dock
     assert dock.windowTitle() == "Files"
     assert c.window.dockWidgetArea(dock) == Qt.DockWidgetArea.LeftDockWidgetArea
-    for widget in (c.open_button, c.previous, c.next, c.file_list, c.locate):
+    for widget in (
+        c.open_button,
+        c.previous,
+        c.next,
+        c.file_list,
+        c.locate,
+        c.select_none_button,
+        c.clear_files_button,
+    ):
         assert dock.isAncestorOf(widget)
     assert c.locate.text() == "Open Output Folder"
     c.window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)

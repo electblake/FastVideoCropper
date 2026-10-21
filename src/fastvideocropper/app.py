@@ -108,7 +108,7 @@ class Application(QObject):
         if folder is not None:
             self.settings.setValue("folder_path", folder)
         self.paths = []
-        self.index = 0
+        self.index = -1
         self.done = set()
         self.rotation = 0
         self.width = self.height = 1.0
@@ -305,6 +305,10 @@ class Application(QObject):
         files_layout.addWidget(self.file_summary)
         self.locate = self.button(
             "Open Output Folder", self.locate_output, files_layout
+        )
+        self.select_none_button = self.button("Select none", self.unload, files_layout)
+        self.clear_files_button = self.button(
+            "Clear files", self.clear_files, files_layout
         )
         splitter = self.splitter = QSplitter()
         layout.addWidget(splitter, 1)
@@ -1271,17 +1275,54 @@ class Application(QObject):
             item = QListWidgetItem(f"{path.name}\n{status}", self.file_list)
             item.setToolTip(str(path))
             item.setData(Qt.ItemDataRole.UserRole, path)
-        if self.paths:
+        if self.index >= 0:
             self.file_list.setCurrentRow(self.index)
             self.file_list.scrollToItem(self.file_list.currentItem())
             self.file_summary.setText(f"{self.index + 1} of {len(self.paths)}")
+        elif self.paths:
+            self.file_summary.setText(f"{len(self.paths)} files — no video selected")
         else:
             self.file_summary.setText("Open or drop videos to begin")
         self.file_list.blockSignals(False)
 
     def select_file(self, index):
-        if index >= 0 and index != self.index:
+        if index == -1:
+            self.unload()
+        elif index != self.index:
             self.load(index)
+
+    def unload(self):
+        self.load_timer.stop()
+        self.follow_timer.stop()
+        self.count_cancelled()
+        self.auto_export_pending = False
+        self.save_segment()
+        if self.ready:
+            self.save_crop_settings()
+        self.ready = False
+        self.loading = False
+        self.index = -1
+        self.active_segment = -1
+        self.segments = []
+        self.refresh_segments()
+        self.player.stop()
+        self.player.setSource(QUrl())
+        self.video.videoSink().setVideoFrame(QVideoFrame())
+        # Hiding the ViewBox collapses its graphics-layout geometry on later loads.
+        self.view.setOpacity(0)
+        self.refresh_files()
+        self.window.statusBar().showMessage("No video selected")
+        self.update_enabled()
+
+    def clear_files(self):
+        self.unload()
+        self.paths.clear()
+        self.source_segments.clear()
+        self.done.clear()
+        self.output = None
+        self.refresh_files()
+        self.window.statusBar().showMessage("File list cleared")
+        self.update_enabled()
 
     def save_crop_settings(self):
         x, y, w, h = self.rect()
@@ -1296,19 +1337,13 @@ class Application(QObject):
         self.settings.setValue("crop/padding_y", self.padding_fields[1].value())
 
     def load(self, index):
-        self.load_timer.stop()
-        self.count_cancelled()
-        self.save_segment()
-        if self.ready:
-            self.save_crop_settings()
-        self.active_segment = -1
+        self.unload()
         self.segments = self.source_segments.setdefault(self.paths[index], [])
         self.refresh_segments()
         self.ready = False
         self.loading = True
         self.index = index
         self.refresh_files()
-        self.player.stop()
         self.rotation = 0
         self.lock.setChecked(False)
         for field in self.padding_fields:
@@ -1316,8 +1351,6 @@ class Application(QObject):
             field.setValue(0)
             field.blockSignals(False)
         self.set_preset("Custom")
-        self.player.setSource(QUrl())
-        self.video.videoSink().setVideoFrame(QVideoFrame())
         self.output = None
         self.progress.setValue(0)
         self.window.statusBar().showMessage("Loading video…")
@@ -1383,7 +1416,7 @@ class Application(QObject):
             self.lock.setChecked(self.settings.value("crop/locked", type=bool))
         self.ready = True
         self.loading = False
-        self.view.show()
+        self.view.setOpacity(1)
         self.window.statusBar().showMessage("Ready")
         self.geometry_changed()
         self.set_aspect_lock()
@@ -1404,7 +1437,7 @@ class Application(QObject):
 
     def frame_changed(self, frame):
         if (
-            not self.ready
+            self.loading
             and frame.isValid()
             and self.probe.state() == QProcess.ProcessState.NotRunning
             and self.player.duration() > 0
@@ -1993,21 +2026,10 @@ class Application(QObject):
                 self.auto_export_pending = self.auto.isChecked()
             else:
                 if self.advance.isChecked():
-                    self.load_timer.stop()
-                    self.auto_export_pending = False
-                    self.save_segment()
-                    self.save_crop_settings()
-                    self.ready = False
-                    self.active_segment = -1
-                    self.segments = []
-                    self.refresh_segments()
-                    self.player.stop()
-                    self.player.setSource(QUrl())
-                    self.video.videoSink().setVideoFrame(QVideoFrame())
-                    self.view.hide()
-                    self.paths = []
-                    self.index = 0
-                    self.refresh_files()
+                    self.unload()
+                    self.window.statusBar().showMessage(
+                        f"Complete — {len(self.export_jobs)} segments saved"
+                    )
                 if self.quit_done.isChecked():
                     self.countdown("quit", self.quit_delay.value())
         if (
@@ -2078,11 +2100,13 @@ class Application(QObject):
         self.check_update_button.setEnabled(not busy)
         self.install_button.setEnabled(not busy)
         self.file_list.setEnabled(bool(self.paths) and not busy)
+        self.select_none_button.setEnabled(self.index >= 0 and not busy)
+        self.clear_files_button.setEnabled(bool(self.paths) and not busy)
         self.count_now.setEnabled(self.count_action == "quit" or self.ready)
         self.open_button.setEnabled(not busy)
         self.open_action.setEnabled(not busy)
         self.previous.setEnabled(not busy and self.index > 0)
-        self.next.setEnabled(not busy and self.index + 1 < len(self.paths))
+        self.next.setEnabled(not busy and 0 <= self.index < len(self.paths) - 1)
         self.export_button.setEnabled(self.ready and bool(self.segments) and not busy)
         self.crop_page.setEnabled(self.ready and bool(self.segments) and not busy)
         self.roi.setEnabled(self.ready and bool(self.segments) and not busy)

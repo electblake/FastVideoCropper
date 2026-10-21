@@ -7,8 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added Select none and Clear files buttons at the bottom of the Files dock.
+
 ### Fixed
 
+- Kept the file list and saved segment crops after the final export while releasing the current video.
+- Released the previous video when switching or clearing selection, and allowed retained files to be selected and loaded again.
+- Preserved the preview layout when unloading so subsequent runs and newly opened or dropped files displayed video without restarting the app.
 - Created the default full-timeline segment when scene detection was canceled, failed, or returned no segments and Automatically create first segment was enabled.
 
 ## [0.7.7] - 2026-10-21
