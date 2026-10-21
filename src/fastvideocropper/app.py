@@ -476,15 +476,16 @@ class Application(QObject):
         self.clear_segments_button = self.button(
             "Clear segments", self.clear_segments, process_buttons
         )
-        self.export_button = self.button(
-            "Export segments", self.export, process_buttons
-        )
         self.pause = self.button("Pause", self.pause_export, process_buttons)
         self.stop = self.button("Stop and keep", self.stop_export, process_buttons)
         self.cancel = self.button(
             "Cancel and delete", self.cancel_export, process_buttons
         )
         left_layout.addLayout(process_buttons)
+        self.export_button = self.button(
+            "Export segments", self.export, left_layout
+        )
+        self.export_button.setMinimumHeight(44)
         self.remember_crop = QCheckBox("Remember crop settings")
         self.remember_crop.setToolTip(
             "Restore the last crop, rotation, aspect preset, aspect lock, and padding "

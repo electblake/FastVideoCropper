@@ -45,7 +45,7 @@ def test_segment_and_export_button_grid(controller, qtbot, source, placement):
         layout.itemAt(i).layout()
         for i in range(layout.count())
         if isinstance(layout.itemAt(i).layout(), QGridLayout)
-        and layout.itemAt(i).layout().indexOf(c.export_button) >= 0
+        and layout.itemAt(i).layout().indexOf(c.add_segment_button) >= 0
     )
     buttons = [
         c.add_segment_button,
@@ -58,11 +58,15 @@ def test_segment_and_export_button_grid(controller, qtbot, source, placement):
         c.stop,
         c.cancel,
     ]
-    assert grid.count() == 9
-    for i, button in enumerate(buttons):
+    assert grid.count() == 8
+    grid_buttons = [button for button in buttons if button is not c.export_button]
+    for i, button in enumerate(grid_buttons):
         assert grid.itemAtPosition(i // 3, i % 3).widget() is button
         assert button.parentWidget() is parent
         assert not c.segments_dock.isAncestorOf(button)
+    export_index = layout.indexOf(c.export_button)
+    assert layout.itemAt(export_index - 1).layout() is grid
+    assert layout.itemAt(export_index + 1).layout().indexOf(c.remember_crop) >= 0
     if placement == "floating":
         c.segments_dock.setFloating(True)
     elif placement == "hidden":
@@ -78,6 +82,9 @@ def test_segment_and_export_button_grid(controller, qtbot, source, placement):
     for button in buttons:
         assert button.isVisible()
         assert button.width() >= button.minimumSizeHint().width()
+    assert c.export_button.width() == grid.geometry().width()
+    assert c.export_button.height() >= 44
+    assert c.export_button.height() > c.add_segment_button.height()
     for state in ("loading", "running", "resolving_encoder"):
         setattr(c, state, True)
         c.update_enabled()

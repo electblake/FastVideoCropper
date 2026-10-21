@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Moved Export segments below the action grid and above the checkboxes, spanning the grid's full width with a 44-pixel minimum height.
+
 ## [0.7.10] - 2026-10-21
 
 ### Changed
