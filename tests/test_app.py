@@ -1594,7 +1594,6 @@ def test_explorer_install_lifecycle(controller, qtbot, monkeypatch, exit_code, m
         c.install_button,
         c.open_button,
         c.open_action,
-        c.folder,
         c.export_button,
         c.previous,
         c.next,
@@ -1608,7 +1607,6 @@ def test_explorer_install_lifecycle(controller, qtbot, monkeypatch, exit_code, m
     assert not c.installing
     assert c.install_button.isEnabled()
     assert c.open_button.isEnabled()
-    assert c.folder.isEnabled()
     assert (c.install_status.text() == "Installed in File Explorer") == (exit_code == 0)
 
 
@@ -1620,7 +1618,6 @@ def test_explorer_folder_startup(qtbot, tmp_path, monkeypatch):
     folder = str(tmp_path / "Selected folder with spaces")
     c = app.Application(folder=folder)
     qtbot.addWidget(c.window)
-    assert c.folder.text() == folder
     assert settings.value("folder_path") == folder
     assert c.paths == []
     assert not c.running
@@ -1660,7 +1657,7 @@ def test_preferences_restored_from_config_file(controller, qtbot, source, tmp_pa
         control = getattr(c, name)
         control.setChecked(not control.isChecked())
         expected[name] = control.isChecked()
-    c.folder.setText(str(tmp_path))
+    c.settings.setValue("folder_path", str(tmp_path))
     c.encoder.setCurrentIndex(c.encoder.findData("auto"))
     c.device.setValue(2)
     c.auto_delay.setValue(12)
@@ -1693,7 +1690,7 @@ def test_preferences_restored_from_config_file(controller, qtbot, source, tmp_pa
     for name, value in expected.items():
         assert getattr(restored, name).isChecked() == value
     assert restored.audio.isMuted() == expected["mute"]
-    assert restored.folder.text() == str(tmp_path)
+    assert restored.settings.value("folder_path") == str(tmp_path)
     assert restored.encoder.currentData() == "auto"
     assert restored.device.value() == 2
     assert restored.auto_delay.value() == 12
@@ -2263,7 +2260,7 @@ def test_files_dock_persistence_and_reset(controller, qtbot, placement):
     dock = c.files_dock
     assert dock.windowTitle() == "Files"
     assert c.window.dockWidgetArea(dock) == Qt.DockWidgetArea.LeftDockWidgetArea
-    for widget in (c.folder, c.open_button, c.previous, c.next, c.file_list):
+    for widget in (c.open_button, c.previous, c.next, c.file_list):
         assert dock.isAncestorOf(widget)
     c.window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
     if placement == "floating":

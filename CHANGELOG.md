@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-10-20
+
+### Removed
+
+- Removed the Folder label and input from the Files widget, preserving video opening, drag-and-drop loading, and the saved file-dialog starting location.
+
 ## [0.7.4] - 2026-10-20
 
 ### Fixed

@@ -46,7 +46,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
@@ -287,14 +286,6 @@ class Application(QObject):
             Qt.DockWidgetArea.LeftDockWidgetArea, self.files_dock
         )
         view_menu.addAction(self.files_dock.toggleViewAction())
-        folder_form = QFormLayout()
-        folder_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        self.folder = QLineEdit(self.settings.value("folder_path", ""))
-        self.folder.textChanged.connect(
-            lambda value: self.settings.setValue("folder_path", value)
-        )
-        folder_form.addRow("&Folder", self.folder)
-        files_layout.addLayout(folder_form)
         self.open_button = self.button("Open videos…", self.open_files, files_layout)
         self.file_list = QListWidget()
         self.file_list.setAccessibleName("Input videos")
@@ -1263,7 +1254,7 @@ class Application(QObject):
         paths, _ = QFileDialog.getOpenFileNames(
             self.window,
             "Open videos",
-            self.folder.text(),
+            self.settings.value("folder_path", ""),
             "Videos (*.mp4 *.mkv *.mov *.avi *.webm);;All files (*)",
         )
         if paths:
@@ -2073,7 +2064,6 @@ class Application(QObject):
         self.check_update_action.setEnabled(not busy)
         self.check_update_button.setEnabled(not busy)
         self.install_button.setEnabled(not busy)
-        self.folder.setEnabled(not busy)
         self.file_list.setEnabled(bool(self.paths) and not busy)
         self.count_now.setEnabled(self.count_action == "quit" or self.ready)
         self.open_button.setEnabled(not busy)
