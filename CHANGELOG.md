@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-20
+
+### Changed
+
+- Applied the blue icon to the application window, shortcuts, and File Explorer integration.
+- Applied the charcoal icon to the Setup executable.
+- Added the blue logotype to the top of the README at a maximum width of 640 pixels.
+
 ## [0.7.1] - 2026-10-20
 
 ### Changed

@@ -1,3 +1,5 @@
+<img src="assets/blue/logotype.png" alt="FastVideoCropper" width="640" style="max-width: 100%; height: auto;">
+
 # FastVideoCropper
 
 Native PySide6 desktop video cropper. Uses Qt Multimedia for playback, Qt Widgets
@@ -96,7 +98,7 @@ See [component decisions](docs/components.md) and [coverage](docs/coverage.md).
 
 ## Windows installer
 
-Release 0.7.1 provides a small per-user Windows x64 online Setup executable.
+Release 0.7.2 provides a small per-user Windows x64 online Setup executable.
 It downloads uv, Python, the locked Qt/Python dependencies, FFmpeg and FFprobe.
 Installation requires Internet access; the installed app runs offline.
 See [release build instructions](packaging/README.md)

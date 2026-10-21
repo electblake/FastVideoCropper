@@ -20,7 +20,14 @@ from PySide6.QtCore import (
     QTimer,
     QUrl,
 )
-from PySide6.QtGui import QAction, QDesktopServices, QKeySequence, QPen, QTransform
+from PySide6.QtGui import (
+    QAction,
+    QDesktopServices,
+    QIcon,
+    QKeySequence,
+    QPen,
+    QTransform,
+)
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoFrame
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import (
@@ -133,6 +140,9 @@ class Application(QObject):
         self.export_jobs = []
         self.export_index = 0
         self.window = QMainWindow()
+        self.window.setWindowIcon(
+            QIcon(str(Path(__file__).with_name(integrations.ICON_NAME)))
+        )
         self.window.pending_installer = None
         self.update_dialog = UpdateDialog(self.window)
         self.update_dialog.busy_changed.connect(self.update_busy)
