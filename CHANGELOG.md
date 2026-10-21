@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.11] - 2026-10-21
+
+### Fixed
+
+- Added Open in FastVideoCropper to Explorer menus for MP4, MKV, MOV, AVI, and WebM files, including multiple selected videos.
+- Included video-file Explorer registrations in installer upgrade and uninstall handling.
+
 ### Changed
 
 - Moved Export segments below the action grid and above the checkboxes, spanning the grid's full width with a 44-pixel minimum height.

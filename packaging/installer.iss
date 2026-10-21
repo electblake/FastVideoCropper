@@ -79,3 +79,23 @@ Root: HKCU; Subkey: "Software\Classes\Directory\Background\shell\FastVideoCroppe
 Root: HKCU; Subkey: "Software\Classes\Drive\shell\FastVideoCropper"; Flags: dontcreatekey uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\Drive\shell\FastVideoCropper"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\application\src\fastvideocropper\FastVideoCropper-blue.ico"""; Flags: dontcreatekey
 Root: HKCU; Subkey: "Software\Classes\Drive\shell\FastVideoCropper\command"; ValueType: string; ValueData: """{app}\application\.venv\Scripts\pythonw.exe"" -I -m fastvideocropper.installed ""%1"""; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.mp4\shell\FastVideoCropper"; Flags: dontcreatekey uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.mp4\shell\FastVideoCropper"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\application\src\fastvideocropper\FastVideoCropper-blue.ico"""; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.mp4\shell\FastVideoCropper"; ValueType: string; ValueName: "MultiSelectModel"; ValueData: "Player"; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.mp4\shell\FastVideoCropper\command"; ValueType: string; ValueData: """{app}\application\.venv\Scripts\pythonw.exe"" -I -m fastvideocropper.installed ""%1"""; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.mkv\shell\FastVideoCropper"; Flags: dontcreatekey uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.mkv\shell\FastVideoCropper"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\application\src\fastvideocropper\FastVideoCropper-blue.ico"""; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.mkv\shell\FastVideoCropper"; ValueType: string; ValueName: "MultiSelectModel"; ValueData: "Player"; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.mkv\shell\FastVideoCropper\command"; ValueType: string; ValueData: """{app}\application\.venv\Scripts\pythonw.exe"" -I -m fastvideocropper.installed ""%1"""; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.mov\shell\FastVideoCropper"; Flags: dontcreatekey uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.mov\shell\FastVideoCropper"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\application\src\fastvideocropper\FastVideoCropper-blue.ico"""; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.mov\shell\FastVideoCropper"; ValueType: string; ValueName: "MultiSelectModel"; ValueData: "Player"; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.mov\shell\FastVideoCropper\command"; ValueType: string; ValueData: """{app}\application\.venv\Scripts\pythonw.exe"" -I -m fastvideocropper.installed ""%1"""; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.avi\shell\FastVideoCropper"; Flags: dontcreatekey uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.avi\shell\FastVideoCropper"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\application\src\fastvideocropper\FastVideoCropper-blue.ico"""; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.avi\shell\FastVideoCropper"; ValueType: string; ValueName: "MultiSelectModel"; ValueData: "Player"; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.avi\shell\FastVideoCropper\command"; ValueType: string; ValueData: """{app}\application\.venv\Scripts\pythonw.exe"" -I -m fastvideocropper.installed ""%1"""; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.webm\shell\FastVideoCropper"; Flags: dontcreatekey uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.webm\shell\FastVideoCropper"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\application\src\fastvideocropper\FastVideoCropper-blue.ico"""; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.webm\shell\FastVideoCropper"; ValueType: string; ValueName: "MultiSelectModel"; ValueData: "Player"; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.webm\shell\FastVideoCropper\command"; ValueType: string; ValueData: """{app}\application\.venv\Scripts\pythonw.exe"" -I -m fastvideocropper.installed ""%1"""; Flags: dontcreatekey

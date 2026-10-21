@@ -12,6 +12,11 @@ CONTEXTS = (
     (r"Software\Classes\Directory\shell", "%1"),
     (r"Software\Classes\Directory\Background\shell", "%V"),
     (r"Software\Classes\Drive\shell", "%1"),
+    (r"Software\Classes\SystemFileAssociations\.mp4\shell", "%1"),
+    (r"Software\Classes\SystemFileAssociations\.mkv\shell", "%1"),
+    (r"Software\Classes\SystemFileAssociations\.mov\shell", "%1"),
+    (r"Software\Classes\SystemFileAssociations\.avi\shell", "%1"),
+    (r"Software\Classes\SystemFileAssociations\.webm\shell", "%1"),
 )
 
 
@@ -32,6 +37,8 @@ def install(module=APP_MODULE):
         ) as key:
             winreg.SetValueEx(key, "", 0, winreg.REG_SZ, f"Open in {APP_NAME}")
             winreg.SetValueEx(key, "Icon", 0, winreg.REG_SZ, icon)
+            if root.startswith(r"Software\Classes\SystemFileAssociations"):
+                winreg.SetValueEx(key, "MultiSelectModel", 0, winreg.REG_SZ, "Player")
         with winreg.CreateKeyEx(
             winreg.HKEY_CURRENT_USER, menu_key + r"\command", 0, winreg.KEY_SET_VALUE
         ) as key:

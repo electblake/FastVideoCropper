@@ -98,8 +98,10 @@ restores the full frame. Saved crops retain their adjusted size and position.
 Use Lock aspect ratio to lock or unlock resizing independently of preset selection.
 
 Under Help → Install in File Explorer, click Install in File Explorer to add
-“Open in FastVideoCropper” to folder, folder-background, and drive context menus
-for the current user. No administrator access is needed; installing again
+“Open in FastVideoCropper” to video-file, folder, folder-background, and drive
+context menus for the current user. Video-file menus support MP4, MKV, MOV, AVI,
+and WebM files, including multiple selected videos.
+No administrator access is needed; installing again
 overwrites the same entries. Explorer adds the selected folder's videos and opens
 the first video without starting an export. Open videos starts in that folder.
 Source installations use the current interpreter with `-I -m fastvideocropper`,

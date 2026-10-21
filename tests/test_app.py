@@ -156,11 +156,11 @@ def test_process_options_layout_keyboard_and_persistence(
     qtbot.waitUntil(c.window.isActiveWindow)
     parent = c.export_button.parentWidget()
     layout = parent.layout()
-    buttons = layout.itemAt(layout.count() - 2).layout()
+    buttons = layout.itemAt(layout.count() - 3).layout()
     options = layout.itemAt(layout.count() - 1).layout()
     assert isinstance(buttons, QGridLayout)
     assert isinstance(options, QGridLayout)
-    assert buttons.indexOf(c.export_button) >= 0
+    assert layout.itemAt(layout.count() - 2).widget() is c.export_button
     assert options.count() == 5
     preferences = [
         ("remember_crop", "remember_crop"),
@@ -177,7 +177,7 @@ def test_process_options_layout_keyboard_and_persistence(
         assert control.isVisible()
         assert control.width() >= control.minimumSizeHint().width()
         assert parent.rect().contains(control.geometry())
-        assert control.y() > c.cancel.geometry().bottom()
+        assert control.y() > c.export_button.geometry().bottom()
         assert control.hasFocus()
         qtbot.keyClick(control, Qt.Key.Key_Space)
         assert control.isChecked()

@@ -22,7 +22,7 @@ def test_install_commands_and_reinstall(monkeypatch, tmp_path, module):
     monkeypatch.setattr(sys, "executable", str(executable))
     for _ in range(2):
         assert integrations.install(module) == 0
-        assert len(values) == 9
+        assert len(values) == 29
         for root, target in integrations.CONTEXTS:
             key = rf"{root}\FastVideoCropper"
             launcher = f'"{executable.resolve()}"'
@@ -31,6 +31,10 @@ def test_install_commands_and_reinstall(monkeypatch, tmp_path, module):
             assert values[key + r"\command", ""] == f'{launcher} "{target}"'
             icon_root = Path(integrations.__file__).parent
             assert values[key, "Icon"] == f'"{icon_root / integrations.ICON_NAME}"'
+        for extension in (".mp4", ".mkv", ".mov", ".avi", ".webm"):
+            key = rf"Software\Classes\SystemFileAssociations\{extension}\shell\FastVideoCropper"
+            assert values[key, "MultiSelectModel"] == "Player"
+            assert values[key + r"\command", ""] == f'{launcher} "%1"'
     assert all(
         call.args[0] == registry.HKEY_CURRENT_USER
         for call in registry.CreateKeyEx.call_args_list

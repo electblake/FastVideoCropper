@@ -265,7 +265,8 @@ class Application(QObject):
         explorer_layout = QVBoxLayout(explorer)
         hint = QLabel(
             f"Add Open in {integrations.APP_NAME} to right-click menus "
-            "for folders, folder backgrounds, and drives."
+            "for video files (including multiple selections), folders, "
+            "folder backgrounds, and drives."
         )
         hint.setWordWrap(True)
         explorer_layout.addWidget(hint)
@@ -482,9 +483,7 @@ class Application(QObject):
             "Cancel and delete", self.cancel_export, process_buttons
         )
         left_layout.addLayout(process_buttons)
-        self.export_button = self.button(
-            "Export segments", self.export, left_layout
-        )
+        self.export_button = self.button("Export segments", self.export, left_layout)
         self.export_button.setMinimumHeight(44)
         self.remember_crop = QCheckBox("Remember crop settings")
         self.remember_crop.setToolTip(
