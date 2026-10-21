@@ -51,7 +51,11 @@ timer = QTimer()
 def step():
     global started
     if controller.ready and not started:
-        controller.replace_segments([(0.2, 1.2)])
+        controller.replace_segments([(0.2, 0.7), (0.7, 1.2)])
+        controller.segment_list.setCurrentRow(1)
+        controller.merge_segments_button.click()
+        assert len(controller.segments) == 1
+        assert (controller.segments[0].start, controller.segments[0].end) == (0.2, 1.2)
         controller.set_rect((20, 20, 160, 120))
         controller.rotate(1)
         started = True

@@ -8,10 +8,10 @@ uv sync --locked
 ```
 
 The installer embeds only application source, lock file, metadata, icon, and
-notices. Inno Setup downloads and verifies the SHA-256 of the pinned uv 0.13.4
-and FFmpeg 8.1.2 ZIP archives before extracting them using its native archive
-support. URLs, hashes, download sizes and expanded sizes are in `uv.json` and
-`vendor.json`. Archives are retained under
+notices. Inno Setup downloads and verifies the SHA-256 of pinned uv 0.13.4,
+FFmpeg 8.1.2, and Python 3.13.12 archives before extracting them using its native
+archive support. URLs, hashes, download sizes and expanded sizes are in
+`uv.json`, `vendor.json`, and `python.json`. Archives are retained under
 `%LOCALAPPDATA%\FastVideoCropper\Cache\downloads`, matching
 `platformdirs.user_cache_path("FastVideoCropper", appauthor=False)` on Windows.
 Inno Setup resolves this location before Python is installed. Archive filenames
@@ -23,10 +23,14 @@ from its installed copies, so clearing the cache does not break playback or
 export. Uninstall preserves these archives for later reinstalls; deleting the
 cache causes the next install to download them again. The first install using
 this cache still downloads the archives, even if an older installation exists.
-uv downloads Python 3.13.12 into the application's private `python` directory,
-then installs the application and locked runtime packages into
+Inno extracts Python into the application's private `runtime/python` directory.
+uv uses that interpreter to install the application and locked runtime packages into
 `application/.venv`. It does not register Python or change PATH. Developer
 packages are excluded. No Python, Qt or FFmpeg binaries are embedded in Setup.
+
+There is no `uv python install` step or managed Python junction. Fresh installs
+and upgrades use the same download, verify, extract, and sync sequence. Setup
+retains its default RedirectionGuard mitigation and per-user privileges.
 
 An Internet connection is required during installation; downloads total several
 hundred megabytes. Playback and export work offline afterward. This is a small

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-20
+
+### Added
+
+- Added Merge similar segments to the Segment menu and Segments panel, combining touching segments with matching crop geometry and padding while ignoring preset, aspect lock, and rotation.
+- Preserved the first segment's settings, the selected merged segment, and playback position when merging.
+
+### Fixed
+
+- Fixed Python installation and upgrade junction failures by downloading, verifying, and extracting a pinned Python archive directly through Inno Setup; retained the default RedirectionGuard mitigation.
+- Fixed countdown regression tests to wait for the deferred load-completion callback before checking the timer.
+
 ## [0.6.1] - 2026-10-20
 
 ### Added

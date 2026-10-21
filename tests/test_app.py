@@ -75,6 +75,49 @@ def test_merge_similar_segments(controller, qtbot, source, trigger):
     assert c.active_segment == 1
 
 
+def test_merge_ignores_editing_settings_and_exports(controller, qtbot, source):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready and c.player.duration() == 8000, timeout=15000)
+    c.replace_segments([(0, 2), (2, 8)])
+    c.set_preset("Original")
+    c.padding_fields[0].setValue(-4)
+    c.segment_list.setCurrentRow(1)
+    c.rotate(1)
+    c.full_frame()
+    c.padding_fields[0].setValue(-4)
+    c.set_preset("Custom")
+    c.lock.setChecked(True)
+    c.seek.setValue(4000)
+    first = c.segments[0]
+    assert c.segments[1].rotation != first.rotation
+    assert c.segments[1].preset != first.preset
+    assert c.segments[1].locked != first.locked
+    assert c.merge_segments_button.isEnabled()
+    c.merge_segments_button.click()
+    assert c.segments == [first]
+    assert (first.start, first.end) == (0, 8)
+    assert c.player.position() == 4000
+    assert c.rotation == first.rotation == 0
+    assert c.selected_preset == first.preset
+    assert c.lock.isChecked() == first.locked
+    c.export_with_encoder("libx265")
+    assert not c.merge_segments_action.isEnabled()
+    qtbot.waitUntil(lambda: not c.running, timeout=30000)
+    assert c.window.statusBar().currentMessage() == "Complete — 1 segments saved"
+    metadata = json.loads(
+        subprocess.check_output(
+            ["ffprobe", "-v", "error", "-show_streams", "-of", "json", str(c.output)],
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+    )
+    video, audio = metadata["streams"]
+    assert (video["width"], video["height"]) == (312, 240)
+    assert int(video["nb_frames"]) == 80
+    assert audio["codec_name"] == "aac"
+
+
 @pytest.mark.parametrize("trigger", ["button", "menu"])
 def test_add_full_timeline_segment(controller, qtbot, source, trigger):
     c = controller
@@ -1304,7 +1347,7 @@ def test_auto_advance_with_automatic_segment(controller, qtbot, source, tmp_path
         lambda: c.index == 1 and c.ready and bool(c.segments), timeout=30000
     )
     assert c.rect() == (20, 30, 160, 120)
-    assert c.count_timer.isActive()
+    qtbot.waitUntil(c.count_timer.isActive)
     assert c.count_action == "export"
     assert c.file_list.currentRow() == 1
     assert c.file_list.item(0).text() == f"{source.name}\nDone"
@@ -1326,7 +1369,7 @@ def test_auto_advance_and_countdown(controller, qtbot, source):
     c.auto_delay.setValue(30)
     c.export()
     qtbot.waitUntil(lambda: c.index == 1 and c.ready, timeout=15000)
-    assert c.count_timer.isActive()
+    qtbot.waitUntil(c.count_timer.isActive)
     c.count_cancelled()
     assert not c.count_timer.isActive()
     c.countdown("export", 1)

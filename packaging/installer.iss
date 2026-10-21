@@ -37,6 +37,10 @@ Source: "..\src\fastvideocropper\*.ico"; DestDir: "{app}\application\src\fastvid
 Source: "THIRD-PARTY.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "uv.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "vendor.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "python.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#PythonUrl}"; DestDir: "{localappdata}\{#MyAppName}\Cache\downloads"; DestName: "python-{#PythonHash}.tar.gz"; ExternalSize: {#PythonDownloadSize}; Hash: "{#PythonHash}"; Flags: external download ignoreversion onlyifdoesntexist uninsneveruninstall
+Source: "{localappdata}\{#MyAppName}\Cache\downloads\python-{#PythonHash}.tar.gz"; DestDir: "{tmp}"; ExternalSize: {#PythonTarSize}; Hash: "{#PythonHash}"; Flags: external extractarchive ignoreversion
+Source: "{tmp}\python-{#PythonHash}.tar"; DestDir: "{app}\runtime"; ExternalSize: {#PythonSize}; Hash: "{#PythonTarHash}"; Flags: external extractarchive ignoreversion recursesubdirs createallsubdirs
 ; Matches platformdirs.user_cache_path(MyAppName, appauthor=False) on Windows.
 ; Keep hash-addressed archives across upgrades and uninstall; verify on extraction.
 Source: "{#UvUrl}"; DestDir: "{localappdata}\{#MyAppName}\Cache\downloads"; DestName: "uv-{#UvHash}.zip"; ExternalSize: {#UvDownloadSize}; Hash: "{#UvHash}"; Flags: external download ignoreversion onlyifdoesntexist uninsneveruninstall
@@ -56,14 +60,14 @@ Type: files; Name: "{app}\FastVideoCropper.exe"
 Type: filesandordirs; Name: "{app}\_internal"
 
 [Run]
-Filename: "{app}\tools\uv\uv.exe"; Parameters: "python install 3.13.12 --install-dir ""{app}\python"" --no-bin --no-registry --no-config --no-cache"; StatusMsg: "Downloading Python 3.13.12..."; Flags: runhidden logoutput
-Filename: "{app}\tools\uv\uv.exe"; Parameters: "sync --project ""{app}\application"" --python ""{app}\python\cpython-3.13.12-windows-x86_64-none\python.exe"" --no-python-downloads --locked --no-dev --no-editable --no-config --no-cache"; StatusMsg: "Installing locked Python dependencies..."; Flags: runhidden logoutput
+Filename: "{app}\tools\uv\uv.exe"; Parameters: "sync --project ""{app}\application"" --python ""{app}\runtime\python\python.exe"" --no-python-downloads --locked --no-dev --no-editable --no-config --no-cache"; StatusMsg: "Installing locked Python dependencies..."; Flags: runhidden logoutput
 ; postinstall is checked by default; omit unchecked to launch on Finish.
 Filename: "{app}\application\.venv\Scripts\pythonw.exe"; Parameters: "-I -m fastvideocropper.installed"; WorkingDir: "{app}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\application\.venv"
 Type: filesandordirs; Name: "{app}\python"
+Type: filesandordirs; Name: "{app}\runtime"
 
 [Registry]
 Root: HKCU; Subkey: "Software\Classes\Directory\shell\FastVideoCropper"; Flags: dontcreatekey uninsdeletekey

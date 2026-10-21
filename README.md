@@ -49,6 +49,10 @@ Panel position, size, floating state, and visibility are restored on startup.
 
 Select a segment in the Segments list or click its timeline region to edit its
 crop, rotation, aspect preset, and aspect lock independently.
+**Segment → Merge similar segments** combines consecutive touching segments with
+identical crop geometry and X/Y padding. Preset, aspect lock, and rotation do not
+affect matching; the merged segment retains the first segment's settings. The
+action is enabled when a matching pair exists and the app is idle.
 **Export segments** writes separate `name_SEGMENT_001_CROPPED.ext`,
 `name_SEGMENT_002_CROPPED.ext`, etc. beside the source, overwriting matching outputs.
 If FFmpeg reports that the source container cannot store HEVC (including 3GP and
@@ -92,7 +96,7 @@ See [component decisions](docs/components.md) and [coverage](docs/coverage.md).
 
 ## Windows installer
 
-Release 0.6.1 provides a small per-user Windows x64 online Setup executable.
+Release 0.7.0 provides a small per-user Windows x64 online Setup executable.
 It downloads uv, Python, the locked Qt/Python dependencies, FFmpeg and FFprobe.
 Installation requires Internet access; the installed app runs offline.
 See [release build instructions](packaging/README.md)

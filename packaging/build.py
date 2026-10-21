@@ -14,7 +14,11 @@ root = Path(__file__).resolve().parents[1]
 version = tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"]
 (root / "build").mkdir(exist_ok=True)
 definitions = []
-for name, filename in (("Uv", "uv.json"), ("FFmpeg", "vendor.json")):
+for name, filename in (
+    ("Uv", "uv.json"),
+    ("FFmpeg", "vendor.json"),
+    ("Python", "python.json"),
+):
     manifest = json.loads((root / "packaging" / filename).read_text())
     for field, suffix in (
         ("url", "Url"),
@@ -23,6 +27,9 @@ for name, filename in (("Uv", "uv.json"), ("FFmpeg", "vendor.json")):
         ("extracted_size", "Size"),
     ):
         definitions.append(f'#define {name}{suffix} "{manifest[field]}"')
+    if name == "Python":
+        definitions.append(f'#define PythonTarHash "{manifest["tar_sha256"]}"')
+        definitions.append(f'#define PythonTarSize "{manifest["tar_size"]}"')
 (root / "build/downloads.iss").write_text("\n".join(definitions) + "\n")
 subprocess.run(
     [

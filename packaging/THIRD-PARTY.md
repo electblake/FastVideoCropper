@@ -1,10 +1,10 @@
 # Third-party components
 
-Setup downloads uv from Astral's GitHub release and FFmpeg/FFprobe from Gyan
-Doshi. Their pinned versions, URLs and checksums are recorded in `uv.json` and
-`vendor.json`. The Setup executable does not redistribute their binaries.
+Setup downloads uv and Python from Astral's GitHub releases and FFmpeg/FFprobe
+from Gyan Doshi. Their pinned versions, URLs and checksums are recorded in
+`uv.json`, `python.json`, and `vendor.json`. Setup does not embed their binaries.
 
-uv installs Python from Astral's python-build-standalone distribution and the
+Inno extracts Astral's python-build-standalone distribution. uv installs the
 runtime wheels recorded in `uv.lock`: PySide6/Qt, Shiboken, NumPy, PyQtGraph,
 psutil and platformdirs. Their licenses are retained in the installed Python
 and package distributions. Qt libraries remain dynamically linked.
