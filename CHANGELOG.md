@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-10-21
+
 ### Changed
 
 - Renamed Locate output to Open Output Folder and moved it into the Files widget.
