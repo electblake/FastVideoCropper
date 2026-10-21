@@ -3,6 +3,9 @@
 import sys
 from pathlib import Path
 
+from platformdirs import user_config_path
+from PySide6.QtCore import QSettings
+
 from . import APP_NAME
 
 APP_MODULE = "fastvideocropper"
@@ -27,7 +30,12 @@ def install(module=APP_MODULE):
     launcher = [executable, "-I", "-m", module]
     icon_root = Path(__file__).resolve().parent
 
-    icon = f'"{icon_root / ICON_NAME}"'
+    settings = QSettings(
+        str(user_config_path(APP_NAME, appauthor=False) / "settings.ini"),
+        QSettings.Format.IniFormat,
+    )
+    icon_name = settings.value("appearance/icon", "blue")
+    icon = f'"{icon_root / "icons" / (icon_name + ".ico")}"'
     for root, target in CONTEXTS:
         menu_key = rf"{root}\{APP_NAME}"
         command = " ".join(f'"{part}"' for part in [*launcher, target])

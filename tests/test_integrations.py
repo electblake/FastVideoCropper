@@ -3,12 +3,19 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from PySide6.QtCore import QSettings
 
 from fastvideocropper import integrations
 
 
 @pytest.mark.parametrize("module", ["fastvideocropper", "fastvideocropper.installed"])
-def test_install_commands_and_reinstall(monkeypatch, tmp_path, module):
+@pytest.mark.parametrize("icon_name", [None, "blue", "charcoal", "gray", "violet"])
+def test_install_commands_and_reinstall(monkeypatch, tmp_path, module, icon_name):
+    monkeypatch.setattr(integrations, "user_config_path", lambda *a, **kw: tmp_path)
+    settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
+    if icon_name is not None:
+        settings.setValue("appearance/icon", icon_name)
+        settings.sync()
     registry = MagicMock()
     values = {}
     registry.CreateKeyEx.side_effect = lambda hive, path, reserved, access: MagicMock(
@@ -30,7 +37,9 @@ def test_install_commands_and_reinstall(monkeypatch, tmp_path, module):
             assert values[key, ""] == "Open in FastVideoCropper"
             assert values[key + r"\command", ""] == f'{launcher} "{target}"'
             icon_root = Path(integrations.__file__).parent
-            assert values[key, "Icon"] == f'"{icon_root / integrations.ICON_NAME}"'
+            selected_icon = icon_root / "icons" / ((icon_name or "blue") + ".ico")
+            assert selected_icon.is_file()
+            assert values[key, "Icon"] == f'"{selected_icon}"'
         for extension in (".mp4", ".mkv", ".mov", ".avi", ".webm"):
             key = rf"Software\Classes\SystemFileAssociations\{extension}\shell\FastVideoCropper"
             assert values[key, "MultiSelectModel"] == "Player"

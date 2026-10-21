@@ -59,6 +59,8 @@ edits. Apply is unavailable during processing and automatic countdowns.
 The theme owns all colours, and the choice is saved under `appearance/theme`.
 The icon choice is saved under `appearance/icon`. Packaged icons in
 `src/fastvideocropper/icons/` mirror each asset group's `icon.ico`.
+After applying an icon colour, run **Help → Install in File Explorer** to use
+that colour for new or existing Explorer context-menu entries.
 Reusable component sizing and typography rules live in
 `src/fastvideocropper/styles/components.qss`. Assign the dynamic property
 `variant="primary"` to a push button for primary-action spacing and typography;
