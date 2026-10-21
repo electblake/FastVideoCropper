@@ -58,15 +58,20 @@ def test_segment_and_export_button_grid(controller, qtbot, source, placement):
         c.stop,
         c.cancel,
     ]
-    assert grid.count() == 8
-    grid_buttons = [button for button in buttons if button is not c.export_button]
+    assert grid.count() == 5
+    grid_buttons = buttons[:5]
     for i, button in enumerate(grid_buttons):
         assert grid.itemAtPosition(i // 3, i % 3).widget() is button
         assert button.parentWidget() is parent
         assert not c.segments_dock.isAncestorOf(button)
     export_index = layout.indexOf(c.export_button)
     assert layout.itemAt(export_index - 1).layout() is grid
-    assert layout.itemAt(export_index + 1).layout().indexOf(c.remember_crop) >= 0
+    export_controls = layout.itemAt(export_index + 1).layout()
+    assert isinstance(export_controls, QGridLayout)
+    assert export_controls.count() == 3
+    for column, button in enumerate((c.stop, c.cancel, c.pause)):
+        assert export_controls.itemAtPosition(0, column).widget() is button
+    assert layout.itemAt(export_index + 2).layout().indexOf(c.remember_crop) >= 0
     if placement == "floating":
         c.segments_dock.setFloating(True)
     elif placement == "hidden":
@@ -156,11 +161,11 @@ def test_process_options_layout_keyboard_and_persistence(
     qtbot.waitUntil(c.window.isActiveWindow)
     parent = c.export_button.parentWidget()
     layout = parent.layout()
-    buttons = layout.itemAt(layout.count() - 3).layout()
+    buttons = layout.itemAt(layout.count() - 2).layout()
     options = layout.itemAt(layout.count() - 1).layout()
     assert isinstance(buttons, QGridLayout)
     assert isinstance(options, QGridLayout)
-    assert layout.itemAt(layout.count() - 2).widget() is c.export_button
+    assert layout.itemAt(layout.count() - 3).widget() is c.export_button
     assert options.count() == 5
     preferences = [
         ("remember_crop", "remember_crop"),
@@ -2057,6 +2062,7 @@ def test_explorer_startup_argument(monkeypatch, tmp_path):
     application.return_value.exec.return_value = 0
     controller = MagicMock()
     controller.return_value.window.pending_installer = None
+    controller.return_value.restart_requested = False
     monkeypatch.setattr(app, "QApplication", application)
     monkeypatch.setattr(app, "Application", controller)
     assert app.main() == 0

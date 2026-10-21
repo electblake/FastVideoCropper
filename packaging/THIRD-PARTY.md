@@ -6,7 +6,7 @@ from Gyan Doshi. Their pinned versions, URLs and checksums are recorded in
 
 Inno extracts Astral's python-build-standalone distribution. uv installs the
 runtime wheels recorded in `uv.lock`: PySide6/Qt, Shiboken, NumPy, PyQtGraph,
-psutil and platformdirs. Their licenses are retained in the installed Python
+psutil, platformdirs and qt-themes. Their licenses are retained in the installed Python
 and package distributions. Qt libraries remain dynamically linked.
 
 FFmpeg 8.1.2 essentials is licensed under GPLv3. Its extracted archive retains
@@ -21,3 +21,4 @@ the distributor's LICENSE and README, including build and source references.
 - NumPy: https://numpy.org/
 - psutil: https://github.com/giampaolo/psutil
 - platformdirs: https://github.com/tox-dev/platformdirs
+- qt-themes (MIT): https://github.com/beatreichenbach/qt-themes

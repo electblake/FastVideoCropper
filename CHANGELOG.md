@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-21
+
+### Added
+
+- Added an Appearance settings group with System and qt-themes theme selection, saved preferences, and confirmation before restarting to apply a theme.
+- Added Blue, Charcoal, Gray, and Violet application icon selection, applied immediately without restarting when only the icon changed.
+- Added reusable medium, large, and extra-large button styles for sizing and typography, leaving all colours to the selected theme.
+
+### Changed
+
+- Sized Export segments at twice the normal button height with a 1.5-times font size.
+- Placed Stop and keep, Cancel and delete, and Pause beneath Export segments with medium button sizing.
+- Right-aligned playback controls.
+
+### Fixed
+
+- Included the selectable icons and component stylesheet in the Windows installer.
+
 ## [0.7.11] - 2026-10-21
 
 ### Fixed

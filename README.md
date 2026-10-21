@@ -3,7 +3,7 @@
 # FastVideoCropper
 
 Native PySide6 desktop video cropper. Uses Qt Multimedia for playback, Qt Widgets
-with the system style, PyQtGraph's existing ROI component for crop manipulation,
+with selectable qt-themes palettes, PyQtGraph's existing ROI component for crop manipulation,
 and FFmpeg for HEVC export with copied audio.
 
 ## Run
@@ -49,6 +49,27 @@ folder, window geometry, panel sizes, and selected tab are restored on startup.
 Window geometry, dock layout, and splitter sizes use the `mainWindow` settings group.
 Crop geometry, pixel padding, rotation, preset, and aspect lock belong to each video's segments
 and are retained only during the session.
+
+**Settings → Appearance** offers a **Theme** selector (System or a bundled
+qt-themes palette) and an **Icon** selector beneath it (Blue, Charcoal, Gray,
+Violet, from the `assets/` groups). **Apply** changes the running app icon
+immediately when only the icon changes. A theme change asks before restarting;
+Cancel leaves the saved appearance unchanged. Restarting discards unsaved segment
+edits. Apply is unavailable during processing and automatic countdowns.
+The theme owns all colours, and the choice is saved under `appearance/theme`.
+The icon choice is saved under `appearance/icon`. Packaged icons in
+`src/fastvideocropper/icons/` mirror each asset group's `icon.ico`.
+Reusable component sizing and typography rules live in
+`src/fastvideocropper/styles/components.qss`. Assign the dynamic property
+`variant="primary"` to a push button for primary-action spacing and typography;
+`buttonSize="medium"` gives 1.5× the normal button height and 1.25× the application
+font (Stop and keep, Cancel and delete, and Pause). `buttonSize="large"` gives
+twice the height and 1.5× the font (Export segments). `buttonSize="xlarge"` remains
+available at three times the height and 2.5× the font. Font multipliers are Qt
+point-size equivalents of rem, derived at
+startup from the system font and native button height. Unclassified buttons keep
+their default size. The custom stylesheet
+contains no colour overrides.
 
 **Padding X/Y** adjusts both sides of each axis in whole source pixels: positive
 values expand the crop, negative values inset it. Expansion stops at source edges.
@@ -114,7 +135,8 @@ uv run ruff check .
 ```
 
 The native platform controls retain system fonts, palette, focus indicators,
-and DPI scaling. No stylesheets, custom painting, or custom crop widgets.
+and DPI scaling. The component stylesheet changes only sizing and typography;
+there is no custom painting or custom crop widget.
 Desktop defaults: resizable rectangular window, English labels, system locale
 for numbers, mouse and keyboard input, normal desk viewing distance.
 

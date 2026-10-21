@@ -6,9 +6,11 @@ import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
+from string import Template
 
 import psutil
 import pyqtgraph as pg
+import qt_themes
 from platformdirs import user_config_path
 from PySide6.QtCore import (
     QEvent,
@@ -111,6 +113,37 @@ class Application(QObject):
             str(user_config_path(APP_NAME, appauthor=False) / "settings.ini"),
             QSettings.Format.IniFormat,
         )
+        self.restart_requested = False
+        self.themes = qt_themes.get_themes()
+        self.applied_theme = self.settings.value("appearance/theme", "")
+        self.applied_icon = self.settings.value("appearance/icon", "blue")
+        self.icons = {
+            path.stem: QIcon(str(path))
+            for path in sorted(Path(__file__).with_name("icons").glob("*.ico"))
+        }
+        styles = Path(__file__).with_name("styles")
+        QApplication.instance().setStyleSheet("")
+        if self.applied_theme:
+            qt_themes.set_theme(self.themes[self.applied_theme])
+        normal_button = QPushButton()
+        normal_height = normal_button.sizeHint().height()
+        frame_height = 2 * normal_button.style().pixelMetric(
+            QStyle.PixelMetric.PM_DefaultFrameWidth, None, normal_button
+        )
+        base_font_size = QApplication.font().pointSizeF()
+        normal_button.deleteLater()
+        QApplication.instance().setStyleSheet(
+            Template(
+                (styles / "components.qss").read_text(encoding="utf-8")
+            ).substitute(
+                medium_font_size=base_font_size * 1.25,
+                medium_height=round(normal_height * 1.5) - frame_height,
+                large_font_size=base_font_size * 1.5,
+                xlarge_font_size=base_font_size * 2.5,
+                large_height=normal_height * 2 - frame_height,
+                xlarge_height=normal_height * 3 - frame_height,
+            )
+        )
         if paths:
             path = Path(paths[0]).resolve()
             self.settings.setValue(
@@ -147,9 +180,7 @@ class Application(QObject):
         self.export_jobs = []
         self.export_index = 0
         self.window = QMainWindow()
-        QApplication.setWindowIcon(
-            QIcon(str(Path(__file__).with_name(integrations.ICON_NAME)))
-        )
+        QApplication.setWindowIcon(self.icons[self.applied_icon])
         self.window.pending_installer = None
         self.update_dialog = UpdateDialog(self.window)
         self.update_dialog.busy_changed.connect(self.update_busy)
@@ -387,6 +418,7 @@ class Application(QObject):
         self.range_graph.scene().sigMouseClicked.connect(self.select_timeline_segment)
         playback.addWidget(self.range_graph)
         buttons = QHBoxLayout()
+        buttons.addStretch()
         self.play = self.button("Play", self.toggle_play, buttons)
         self.navigation_buttons = {}
         for name, text, icon, slot in [
@@ -477,14 +509,23 @@ class Application(QObject):
         self.clear_segments_button = self.button(
             "Clear segments", self.clear_segments, process_buttons
         )
-        self.pause = self.button("Pause", self.pause_export, process_buttons)
-        self.stop = self.button("Stop and keep", self.stop_export, process_buttons)
-        self.cancel = self.button(
-            "Cancel and delete", self.cancel_export, process_buttons
-        )
         left_layout.addLayout(process_buttons)
         self.export_button = self.button("Export segments", self.export, left_layout)
-        self.export_button.setMinimumHeight(44)
+        self.export_button.setProperty("variant", "primary")
+        self.export_button.setProperty("buttonSize", "large")
+        export_controls = QGridLayout()
+        export_controls.setDefaultPositioning(3, Qt.Orientation.Horizontal)
+        for column in range(3):
+            export_controls.setColumnStretch(column, 1)
+        self.stop = self.button("Stop and keep", self.stop_export, export_controls)
+        self.stop.setProperty("buttonSize", "medium")
+        self.cancel = self.button(
+            "Cancel and delete", self.cancel_export, export_controls
+        )
+        self.cancel.setProperty("buttonSize", "medium")
+        self.pause = self.button("Pause", self.pause_export, export_controls)
+        self.pause.setProperty("buttonSize", "medium")
+        left_layout.addLayout(export_controls)
         self.remember_crop = QCheckBox("Remember crop settings")
         self.remember_crop.setToolTip(
             "Restore the last crop, rotation, aspect preset, aspect lock, and padding "
@@ -633,6 +674,38 @@ class Application(QObject):
         options = QWidget()
         options_form = QFormLayout(options)
         options_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        appearance = QGroupBox("Appearance")
+        appearance_layout = QGridLayout(appearance)
+        self.theme = QComboBox()
+        self.theme.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.theme.setMinimumContentsLength(8)
+        self.theme.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self.theme.addItem("System", "")
+        for name in sorted(self.themes):
+            self.theme.addItem(name.replace("_", " ").title(), name)
+        self.theme.setCurrentIndex(self.theme.findData(self.applied_theme))
+        theme_label = QLabel("&Theme")
+        theme_label.setBuddy(self.theme)
+        appearance_layout.addWidget(theme_label, 0, 0)
+        appearance_layout.addWidget(self.theme, 1, 0)
+        self.icon = QComboBox()
+        for name, icon in self.icons.items():
+            self.icon.addItem(icon, name.title(), name)
+        self.icon.setCurrentIndex(self.icon.findData(self.applied_icon))
+        icon_label = QLabel("&Icon")
+        icon_label.setBuddy(self.icon)
+        appearance_layout.addWidget(icon_label, 2, 0)
+        appearance_layout.addWidget(self.icon, 3, 0)
+        appearance_layout.setColumnStretch(0, 1)
+        self.apply_appearance_button = QPushButton("Apply")
+        self.apply_appearance_button.setProperty("variant", "primary")
+        self.apply_appearance_button.clicked.connect(self.apply_appearance)
+        appearance_layout.addWidget(self.apply_appearance_button, 3, 1)
+        self.theme.currentIndexChanged.connect(self.update_enabled)
+        self.icon.currentIndexChanged.connect(self.update_enabled)
+        options_form.addRow(appearance)
         self.notify = self.preference(
             "Notify on completion", "notify", False, options_form
         )
@@ -2080,6 +2153,7 @@ class Application(QObject):
         self.count_cancel.show()
         self.count_timer.start()
         self.count_now.setEnabled(action == "quit" or self.ready)
+        self.update_enabled()
 
     def count_tick(self):
         if self.count_action == "export" and not self.ready:
@@ -2106,8 +2180,22 @@ class Application(QObject):
         self.count_label.clear()
         self.count_now.hide()
         self.count_cancel.hide()
+        self.update_enabled()
 
     def update_enabled(self):
+        self.apply_appearance_button.setEnabled(
+            (
+                self.theme.currentData() != self.applied_theme
+                or self.icon.currentData() != self.applied_icon
+            )
+            and not (
+                self.running
+                or self.loading
+                or self.resolving_encoder
+                or self.detecting
+                or self.count_timer.isActive()
+            )
+        )
         self.update_merge_enabled()
         self.update_split_enabled()
         self.update_navigation()
@@ -2176,6 +2264,31 @@ class Application(QObject):
     def install_update(self, path):
         self.window.pending_installer = path
         self.window.close()
+
+    def apply_appearance(self):
+        theme_changed = self.theme.currentData() != self.applied_theme
+        if theme_changed:
+            answer = QMessageBox.question(
+                self.window,
+                "Restart to apply appearance?",
+                "The app will restart to apply the selected appearance. "
+                "Unsaved segment edits will be lost. Continue?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        self.settings.setValue("appearance/theme", self.theme.currentData())
+        self.settings.setValue("appearance/icon", self.icon.currentData())
+        self.settings.sync()
+        self.applied_icon = self.icon.currentData()
+        QApplication.setWindowIcon(self.icons[self.applied_icon])
+        self.window.setWindowIcon(self.icons[self.applied_icon])
+        if theme_changed:
+            self.restart_requested = True
+            self.window.close()
+        else:
+            self.update_enabled()
 
     def show_settings(self):
         dialog = QDialog(self.window)
@@ -2299,6 +2412,11 @@ def main():
     controller = Application(paths=sys.argv[1:])
     controller.window.show()
     result = app.exec()
+    if controller.restart_requested:
+        subprocess.Popen(
+            [sys.executable, "-m", controller.launcher_module, *sys.argv[1:]],
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
     if controller.window.pending_installer is not None:
         os.startfile(controller.window.pending_installer)
     return result

@@ -18,7 +18,8 @@ def test_installed_launcher_uses_private_tools_and_forwards_paths(
     monkeypatch.setattr(installed, "QApplication", lambda args: qt)
     controller = Mock(
         return_value=SimpleNamespace(
-            window=SimpleNamespace(show=lambda: None, pending_installer=None)
+            restart_requested=False,
+            window=SimpleNamespace(show=lambda: None, pending_installer=None),
         )
     )
     monkeypatch.setattr(installed, "Application", controller)

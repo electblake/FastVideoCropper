@@ -1,6 +1,7 @@
 """Entry point for the private environment created by Windows Setup."""
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -29,6 +30,11 @@ def main():
     )
     controller.window.show()
     result = app.exec()
+    if controller.restart_requested:
+        subprocess.Popen(
+            [sys.executable, "-m", MODULE, *sys.argv[1:]],
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
     if controller.window.pending_installer is not None:
         os.startfile(controller.window.pending_installer)
     return result

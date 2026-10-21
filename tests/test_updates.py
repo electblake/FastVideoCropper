@@ -194,7 +194,9 @@ def test_launch_after_event_loop(monkeypatch, tmp_path, install, packaged):
         events.append("launch")
 
     monkeypatch.setattr(
-        app, "Application", lambda *a, **kw: SimpleNamespace(window=window)
+        app,
+        "Application",
+        lambda *a, **kw: SimpleNamespace(window=window, restart_requested=False),
     )
     monkeypatch.setattr(app, "QApplication", FakeApp)
     monkeypatch.setattr(app.os, "startfile", launch)
@@ -202,7 +204,9 @@ def test_launch_after_event_loop(monkeypatch, tmp_path, install, packaged):
     if packaged:
         monkeypatch.setattr(installed, "QApplication", FakeApp)
         monkeypatch.setattr(
-            installed, "Application", lambda *a, **kw: SimpleNamespace(window=window)
+            installed,
+            "Application",
+            lambda *a, **kw: SimpleNamespace(window=window, restart_requested=False),
         )
         assert installed.main() == 7
     else:

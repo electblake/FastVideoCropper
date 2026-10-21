@@ -34,6 +34,8 @@ Source: "..\README.md"; DestDir: "{app}\application"; Flags: ignoreversion
 Source: "..\CHANGELOG.md"; DestDir: "{app}\application"; Flags: ignoreversion
 Source: "..\src\fastvideocropper\*.py"; DestDir: "{app}\application\src\fastvideocropper"; Flags: ignoreversion
 Source: "..\src\fastvideocropper\*.ico"; DestDir: "{app}\application\src\fastvideocropper"; Flags: ignoreversion
+Source: "..\src\fastvideocropper\icons\*.ico"; DestDir: "{app}\application\src\fastvideocropper\icons"; Flags: ignoreversion
+Source: "..\src\fastvideocropper\styles\*.qss"; DestDir: "{app}\application\src\fastvideocropper\styles"; Flags: ignoreversion
 Source: "THIRD-PARTY.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "uv.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "vendor.json"; DestDir: "{app}"; Flags: ignoreversion
