@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added Copy Logs to Clipboard and Clear Logs buttons beneath the Process log, with status-bar confirmation for both actions.
+
 ### Removed
 
 - Removed the Zoom into frame checkbox and automatic crop-focused preview fitting.

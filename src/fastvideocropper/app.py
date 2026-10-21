@@ -634,10 +634,19 @@ class Application(QObject):
         options_scroll.setWidgetResizable(True)
         options_scroll.setWidget(options)
         tabs.addTab(options_scroll, "Settings")
+        log_page = QWidget()
+        log_layout = QVBoxLayout(log_page)
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(2000)
-        tabs.addTab(self.log, "Process log")
+        log_layout.addWidget(self.log, 1)
+        log_buttons = QHBoxLayout()
+        self.copy_logs_button = self.button(
+            "Copy Logs to Clipboard", self.copy_logs, log_buttons
+        )
+        self.clear_logs_button = self.button("Clear Logs", self.clear_logs, log_buttons)
+        log_layout.addLayout(log_buttons)
+        tabs.addTab(log_page, "Process log")
         self.remember_crop = QCheckBox("Remember crop settings")
         self.remember_crop.setToolTip(
             "Restore the last crop, rotation, aspect preset, aspect lock, and padding "
@@ -1667,6 +1676,15 @@ class Application(QObject):
         self.update_enabled()
         arguments = ["-I", "-m", self.launcher_module, "--install-explorer"]
         self.process.start(str(Path(sys.executable).resolve()), arguments)
+
+    def copy_logs(self):
+        self.log.selectAll()
+        self.log.copy()
+        self.window.statusBar().showMessage("Logs copied to clipboard")
+
+    def clear_logs(self):
+        self.log.clear()
+        self.window.statusBar().showMessage("Logs cleared")
 
     def read_log(self):
         text = bytes(self.process.readAllStandardError()).decode("utf-8")
