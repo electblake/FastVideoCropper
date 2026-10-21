@@ -282,15 +282,15 @@ class Application(QObject):
         files = QWidget()
         files_layout = QVBoxLayout(files)
         self.files_dock.setWidget(files)
-        self.window.addDockWidget(
-            Qt.DockWidgetArea.LeftDockWidgetArea, self.files_dock
-        )
+        self.window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.files_dock)
         view_menu.addAction(self.files_dock.toggleViewAction())
         self.open_button = self.button("Open videos…", self.open_files, files_layout)
         self.file_list = QListWidget()
         self.file_list.setAccessibleName("Input videos")
         self.file_list.setTextElideMode(Qt.TextElideMode.ElideMiddle)
-        self.file_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.file_list.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
         self.file_list.currentRowChanged.connect(self.select_file)
         files_layout.addWidget(self.file_list, 1)
         header = QHBoxLayout()
@@ -564,14 +564,14 @@ class Application(QObject):
         form.addRow(presets)
         for divisions, positions in [
             (3, ["Left", "Center", "Right"]),
-            (2, ["Left", "Right"]),
+            (2, ["Left", "Center", "Right"]),
         ]:
             row = QHBoxLayout()
             for index, position in enumerate(positions):
                 self.button(
                     f"1/{divisions} {position}",
                     lambda checked=False, divisions=divisions, index=index: (
-                        self.crop_slice(divisions, index)
+                        self.crop_slice(divisions, index * (divisions - 1) / 2)
                     ),
                     row,
                 )
@@ -1445,7 +1445,8 @@ class Application(QObject):
     def update_navigation(self):
         position = self.player.position()
         index = (
-            sum(round(segment.start * 1000) <= position for segment in self.segments) - 1
+            sum(round(segment.start * 1000) <= position for segment in self.segments)
+            - 1
         )
         self.navigation_buttons["previous"].setEnabled(index > 0)
         self.navigation_buttons["next"].setEnabled(index + 1 < len(self.segments))
@@ -1453,7 +1454,8 @@ class Application(QObject):
     def jump_segment(self, direction):
         position = self.player.position()
         index = (
-            sum(round(segment.start * 1000) <= position for segment in self.segments) - 1
+            sum(round(segment.start * 1000) <= position for segment in self.segments)
+            - 1
         )
         self.seek_segment(round(self.segments[index + direction].start * 1000))
 

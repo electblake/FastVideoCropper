@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QPushButton
 
 from fastvideocropper import app as application
 
@@ -65,6 +65,15 @@ def step():
             )
             assert abs(x + width / 2 - controller.width / 2) < 1e-9
             assert abs(y + height / 2 - controller.height / 2) < 1e-9
+        buttons = {
+            button.text(): button
+            for button in controller.window.findChildren(QPushButton)
+        }
+        buttons["1/2 Center"].click()
+        assert controller.rect() == (80, 0, 160, 240)
+        buttons["1/2 Right"].click()
+        buttons["Center frame"].click()
+        assert controller.rect() == (80, 0, 160, 240)
         controller.set_rect((20, 20, 160, 120))
         controller.rotate(1)
         started = True
@@ -102,6 +111,7 @@ def step():
                     "frames": 10,
                     "playback": "Qt Multimedia decoded source",
                     "presets": "Three cycles retained full-frame crop dimensions",
+                    "half_center": "Matched a half crop followed by Center frame",
                     "audio": "aac",
                 },
                 indent=2,

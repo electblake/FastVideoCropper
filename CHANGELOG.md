@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.7] - 2026-10-21
+
+### Added
+
+- Added 1/2 Center below 1/3 Center, between 1/2 Left and 1/2 Right, to select the centered half of the frame.
+- Added regression coverage for slice button placement, crop geometry, rotation, aspect locking, keyboard activation, and saved segment restoration.
+
 ## [0.7.6] - 2026-10-21
 
 ### Changed

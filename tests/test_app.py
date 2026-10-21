@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox,
     QMessageBox,
+    QPushButton,
     QSpinBox,
     QStatusBar,
 )
@@ -717,8 +718,10 @@ def test_export_preview_keeps_segment_geometry_during_progress(
     c.export_with_encoder("libx265")
     for index, expected in enumerate([(20, 30, 160, 120), (10, 20, 100, 200)]):
         qtbot.waitUntil(
-            lambda index=index: c.export_index == index
-            and c.player.position() > (c.segments[index].start + 0.5) * 1000,
+            lambda index=index: (
+                c.export_index == index
+                and c.player.position() > (c.segments[index].start + 0.5) * 1000
+            ),
             timeout=15000,
         )
         assert c.running
@@ -878,6 +881,56 @@ def test_gpu_probe_keeps_event_loop_responsive(controller, qtbot, source, monkey
     qtbot.waitUntil(lambda: bool(selected))
     assert selected == ["hevc_nvenc"]
     assert not c.resolving_encoder
+
+
+@pytest.mark.parametrize("rotation", [0, 1, 2, 3])
+def test_slice_buttons_center_and_preserve_saved_crop(
+    controller, qtbot, source, rotation
+):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 4), (4, 8)])
+    c.rotate(rotation)
+    buttons = {button.text(): button for button in c.window.findChildren(QPushButton)}
+    left = buttons["1/2 Left"].mapToGlobal(QPointF(0, 0).toPoint())
+    center = buttons["1/2 Center"].mapToGlobal(QPointF(0, 0).toPoint())
+    right = buttons["1/2 Right"].mapToGlobal(QPointF(0, 0).toPoint())
+    third = buttons["1/3 Center"].mapToGlobal(QPointF(0, 0).toPoint())
+    assert left.x() < center.x() < right.x()
+    assert left.y() == center.y() == right.y()
+    assert center.x() == third.x()
+    assert center.y() > third.y()
+    for locked in (False, True):
+        c.lock.setChecked(locked)
+        for name, x, width in [
+            ("1/2 Left", 0, 0.5),
+            ("1/2 Center", 0.25, 0.5),
+            ("1/2 Right", 0.5, 0.5),
+            ("1/3 Left", 0, 1 / 3),
+            ("1/3 Center", 1 / 3, 1 / 3),
+            ("1/3 Right", 2 / 3, 1 / 3),
+        ]:
+            c.set_preset("Square")
+            c.set_rect((10, 20, 80, 80))
+            qtbot.mouseClick(buttons[name], Qt.MouseButton.LeftButton)
+            assert c.rect() == pytest.approx(
+                (x * c.width, 0, width * c.width, c.height)
+            )
+            assert c.selected_preset == "Custom"
+            assert c.lock.isChecked() == locked
+            assert c.segments[0].rect == pytest.approx((x, 0, width, 1))
+        qtbot.mouseClick(buttons["1/2 Left"], Qt.MouseButton.LeftButton)
+        qtbot.mouseClick(buttons["Center frame"], Qt.MouseButton.LeftButton)
+        expected = c.rect()
+        buttons["1/2 Center"].setFocus()
+        qtbot.keyClick(buttons["1/2 Center"], Qt.Key.Key_Space)
+        assert c.rect() == pytest.approx(expected)
+        c.segment_list.setCurrentRow(1)
+        c.segment_list.setCurrentRow(0)
+        assert c.rect() == pytest.approx(expected)
+        assert c.selected_preset == "Custom"
 
 
 @pytest.mark.parametrize("rotation", [0, 1, 2, 3])
