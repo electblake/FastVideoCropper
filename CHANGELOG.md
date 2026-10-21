@@ -24,7 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Reused the installed pinned Python runtime during upgrades, avoiding repeated creation of its Windows minor-version junction.
 - Retried HEVC container rejections as MKV, reporting the fallback and output filename in the Process log and using MKV for remaining segments.
 - Bounded fallback diagnostic memory while recognizing messages split across FFmpeg output chunks; kept canceled exports, crashes, and unrelated failures from retrying.
 - Explicitly released displayed video frames when unloading completed videos, switching files, and closing the application.
