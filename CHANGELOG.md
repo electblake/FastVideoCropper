@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Renamed Locate output to Open Output Folder and moved it into the Files widget.
+- Moved Export segments to the start of the center export controls, immediately before Pause.
+- Applied the blue icon throughout the application and Windows shortcuts, and reserved the gray icon for Setup.
+
+### Fixed
+
+- Used a distinct blue icon filename for shortcuts and Explorer integration to avoid reusing cached artwork.
+- Applied the application icon to all windows and dialogs.
+- Updated layout regression checks for the relocated export and output-folder buttons.
+
 ## [0.7.5] - 2026-10-20
 
 ### Removed

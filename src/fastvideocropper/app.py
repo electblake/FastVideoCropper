@@ -138,7 +138,7 @@ class Application(QObject):
         self.export_jobs = []
         self.export_index = 0
         self.window = QMainWindow()
-        self.window.setWindowIcon(
+        QApplication.setWindowIcon(
             QIcon(str(Path(__file__).with_name(integrations.ICON_NAME)))
         )
         self.window.pending_installer = None
@@ -303,6 +303,9 @@ class Application(QObject):
         self.file_summary = QLabel("Open or drop videos to begin")
         self.file_summary.setWordWrap(True)
         files_layout.addWidget(self.file_summary)
+        self.locate = self.button(
+            "Open Output Folder", self.locate_output, files_layout
+        )
         splitter = self.splitter = QSplitter()
         layout.addWidget(splitter, 1)
         left = QWidget()
@@ -440,12 +443,14 @@ class Application(QObject):
         left_layout.addWidget(self.progress)
         self.window.statusBar().showMessage("Ready")
         process_buttons = QHBoxLayout()
+        self.export_button = self.button(
+            "Export segments", self.export, process_buttons
+        )
         self.pause = self.button("Pause", self.pause_export, process_buttons)
         self.stop = self.button("Stop and keep", self.stop_export, process_buttons)
         self.cancel = self.button(
             "Cancel and delete", self.cancel_export, process_buttons
         )
-        self.locate = self.button("Locate output", self.locate_output, process_buttons)
         left_layout.addLayout(process_buttons)
         splitter.addWidget(left)
         right = QWidget()
@@ -486,9 +491,6 @@ class Application(QObject):
         )
         self.merge_segments_button = self.button(
             "Merge similar segments", self.merge_segments, segments_layout
-        )
-        self.export_button = self.button(
-            "Export segments", self.export, segments_layout
         )
         tabs = self.tabs = QTabWidget()
         right_layout.addWidget(tabs, 1)

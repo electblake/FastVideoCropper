@@ -132,8 +132,11 @@ def test_add_full_timeline_segment(controller, qtbot, source, trigger):
         if action.text() == "&Segment"
     )
     assert c.add_segment_action in segment_menu.actions()
-    dock_layout = c.segments_dock.widget().layout()
-    assert dock_layout.itemAt(dock_layout.count() - 1).widget() is c.export_button
+    process_buttons = c.export_button.parentWidget().layout()
+    process_buttons = process_buttons.itemAt(process_buttons.count() - 1).layout()
+    assert process_buttons.itemAt(0).widget() is c.export_button
+    assert process_buttons.itemAt(1).widget() is c.pause
+    assert c.window.centralWidget().isAncestorOf(c.export_button)
     assert c.segments_dock.isAncestorOf(c.add_segment_button)
     c.paths = [source]
     c.load(0)
@@ -2260,8 +2263,9 @@ def test_files_dock_persistence_and_reset(controller, qtbot, placement):
     dock = c.files_dock
     assert dock.windowTitle() == "Files"
     assert c.window.dockWidgetArea(dock) == Qt.DockWidgetArea.LeftDockWidgetArea
-    for widget in (c.open_button, c.previous, c.next, c.file_list):
+    for widget in (c.open_button, c.previous, c.next, c.file_list, c.locate):
         assert dock.isAncestorOf(widget)
+    assert c.locate.text() == "Open Output Folder"
     c.window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
     if placement == "floating":
         dock.setFloating(True)

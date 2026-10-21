@@ -15,8 +15,8 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
 OutputDir=..\dist\installer
 OutputBaseFilename=FastVideoCropper-{#MyAppVersion}-windows-amd64-Setup
-UninstallDisplayIcon={app}\application\src\fastvideocropper\FastVideoCropper.ico
-SetupIconFile=..\assets\charcoal\icon.ico
+UninstallDisplayIcon={app}\application\src\fastvideocropper\FastVideoCropper-blue.ico
+SetupIconFile=..\assets\gray\icon.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -52,8 +52,8 @@ Source: "{localappdata}\{#MyAppName}\Cache\downloads\ffmpeg-{#FFmpegHash}.zip"; 
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\application\.venv\Scripts\pythonw.exe"; Parameters: "-I -m fastvideocropper.installed"; WorkingDir: "{app}"; IconFilename: "{app}\application\src\fastvideocropper\FastVideoCropper.ico"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\application\.venv\Scripts\pythonw.exe"; Parameters: "-I -m fastvideocropper.installed"; WorkingDir: "{app}"; IconFilename: "{app}\application\src\fastvideocropper\FastVideoCropper.ico"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\application\.venv\Scripts\pythonw.exe"; Parameters: "-I -m fastvideocropper.installed"; WorkingDir: "{app}"; IconFilename: "{app}\application\src\fastvideocropper\FastVideoCropper-blue.ico"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\application\.venv\Scripts\pythonw.exe"; Parameters: "-I -m fastvideocropper.installed"; WorkingDir: "{app}"; IconFilename: "{app}\application\src\fastvideocropper\FastVideoCropper-blue.ico"; Tasks: desktopicon
 
 [InstallDelete]
 Type: files; Name: "{app}\FastVideoCropper.exe"
@@ -71,11 +71,11 @@ Type: filesandordirs; Name: "{app}\runtime"
 
 [Registry]
 Root: HKCU; Subkey: "Software\Classes\Directory\shell\FastVideoCropper"; Flags: dontcreatekey uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\Directory\shell\FastVideoCropper"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\application\src\fastvideocropper\FastVideoCropper.ico"""; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\Directory\shell\FastVideoCropper"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\application\src\fastvideocropper\FastVideoCropper-blue.ico"""; Flags: dontcreatekey
 Root: HKCU; Subkey: "Software\Classes\Directory\shell\FastVideoCropper\command"; ValueType: string; ValueData: """{app}\application\.venv\Scripts\pythonw.exe"" -I -m fastvideocropper.installed ""%1"""; Flags: dontcreatekey
 Root: HKCU; Subkey: "Software\Classes\Directory\Background\shell\FastVideoCropper"; Flags: dontcreatekey uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\Directory\Background\shell\FastVideoCropper"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\application\src\fastvideocropper\FastVideoCropper.ico"""; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\Directory\Background\shell\FastVideoCropper"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\application\src\fastvideocropper\FastVideoCropper-blue.ico"""; Flags: dontcreatekey
 Root: HKCU; Subkey: "Software\Classes\Directory\Background\shell\FastVideoCropper\command"; ValueType: string; ValueData: """{app}\application\.venv\Scripts\pythonw.exe"" -I -m fastvideocropper.installed ""%V"""; Flags: dontcreatekey
 Root: HKCU; Subkey: "Software\Classes\Drive\shell\FastVideoCropper"; Flags: dontcreatekey uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\Drive\shell\FastVideoCropper"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\application\src\fastvideocropper\FastVideoCropper.ico"""; Flags: dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\Drive\shell\FastVideoCropper"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\application\src\fastvideocropper\FastVideoCropper-blue.ico"""; Flags: dontcreatekey
 Root: HKCU; Subkey: "Software\Classes\Drive\shell\FastVideoCropper\command"; ValueType: string; ValueData: """{app}\application\.venv\Scripts\pythonw.exe"" -I -m fastvideocropper.installed ""%1"""; Flags: dontcreatekey

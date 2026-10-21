@@ -6,7 +6,7 @@ from pathlib import Path
 from . import APP_NAME
 
 APP_MODULE = "fastvideocropper"
-ICON_NAME = f"{APP_NAME}.ico"
+ICON_NAME = f"{APP_NAME}-blue.ico"
 
 CONTEXTS = (
     (r"Software\Classes\Directory\shell", "%1"),
