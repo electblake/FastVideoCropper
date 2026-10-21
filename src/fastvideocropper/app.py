@@ -319,7 +319,6 @@ class Application(QObject):
         self.padding_outline.hide()
         self.view.addItem(self.padding_outline)
         self.roi.sigRegionChanged.connect(self.geometry_changed)
-        self.roi.sigRegionChangeFinished.connect(self.geometry_finished)
         self.masks = []
         for _ in range(4):
             mask = QGraphicsRectItem()
@@ -502,7 +501,6 @@ class Application(QObject):
             form.addRow(f"Padding {axis}", row)
             self.padding_fields.append(field)
             field.valueChanged.connect(self.geometry_changed)
-            field.valueChanged.connect(self.geometry_finished)
         padding_reset_row = QHBoxLayout()
         self.button(
             "Zero both",
@@ -556,8 +554,6 @@ class Application(QObject):
         self.detect_crop_button = QPushButton("Detect crop borders…")
         self.detect_crop_button.clicked.connect(self.show_crop_detection)
         form.addRow(self.detect_crop_button)
-        self.zoom = self.preference("Zoom into frame", "zoom", False, form)
-        self.zoom.toggled.connect(self.fit)
         fit_row = QHBoxLayout()
         self.button("Fit view", self.fit, fit_row)
         form.addRow(fit_row)
@@ -1449,10 +1445,6 @@ class Application(QObject):
                     self.set_preset("Custom")
             self.save_segment()
 
-    def geometry_finished(self):
-        if self.zoom.isChecked():
-            self.fit()
-
     def numeric_geometry(self):
         x, y, old_w, old_h = self.rect()
         w, h = old_w, old_h
@@ -1518,12 +1510,10 @@ class Application(QObject):
         else:
             h = w / ratio
         self.set_rect((x, y, w, h))
-        self.geometry_finished()
 
     def center(self):
         _, _, w, h = self.rect()
         self.set_rect(((self.width - w) / 2, (self.height - h) / 2, w, h))
-        self.geometry_finished()
 
     def full_frame(self):
         self.set_rect((0, 0, self.width, self.height))
@@ -1570,13 +1560,6 @@ class Application(QObject):
 
     def fit(self):
         rect = QRectF(0, 0, self.width, self.height)
-        if self.zoom.isChecked():
-            rect = (
-                QRectF(*self.rect())
-                .united(self.padding_outline.rect())
-                .adjusted(-50, -50, 50, 50)
-                .intersected(rect)
-            )
         self.view.setRange(rect, padding=0)
 
     def export(self):

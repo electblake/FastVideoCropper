@@ -350,7 +350,7 @@ def test_pixel_padding_segments_preview_and_export(controller, qtbot, source, tm
     c.set_rect((80, 30, 320, 120))
     assert c.padding_outline.rect().getRect() == (74, 35, 332, 110)
     c.padding_fields[0].setValue(100)
-    c.zoom.setChecked(True)
+    c.fit()
     assert c.view.viewRect().contains(c.padding_outline.rect())
 
 
@@ -376,16 +376,17 @@ def test_padding_resets_for_new_video_and_restores_on_return(
     assert [field.value() for field in c.padding_fields] == [-7, -3]
 
 
-def test_padding_edit_refits_zoomed_preview(controller, qtbot, source):
+def test_padding_edit_preserves_manual_zoom(controller, qtbot, source):
     c = controller
     c.paths = [source]
     c.load(0)
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
     c.replace_segments([(0, 1)])
     c.set_rect((140, 100, 40, 40))
-    c.zoom.setChecked(True)
+    c.view.scaleBy((0.5, 0.5))
+    view_rect = c.view.viewRect()
     c.padding_fields[1].setValue(100)
-    assert c.view.viewRect().contains(c.padding_outline.rect())
+    assert c.view.viewRect() == view_rect
 
 
 def test_load_crop_rotate_export(controller, qtbot, source, tmp_path):
@@ -1340,7 +1341,6 @@ def test_preferences_restored_from_config_file(controller, qtbot, source, tmp_pa
     assert c.settings.format() == QSettings.Format.IniFormat
     checkboxes = [
         "mute",
-        "zoom",
         "notify",
         "preview",
         "wheel",

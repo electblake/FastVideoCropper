@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- Removed the Zoom into frame checkbox and automatic crop-focused preview fitting.
+
 ### Fixed
 
 - Explicitly released displayed video frames when unloading completed videos, switching files, and closing the application.
