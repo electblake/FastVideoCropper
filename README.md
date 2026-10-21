@@ -73,6 +73,9 @@ Turning off preview updates still loads the starting frame for each segment.
 
 Choose common aspect ratios directly from the 12-button preset grid. The selected
 button stays checked; independent edits that change the ratio clear it to Custom.
+Each button centers the largest crop that fits the original video dimensions,
+including rotation. Switching presets never compounds the previous crop; Original
+restores the full frame. Saved crops retain their adjusted size and position.
 Use Lock aspect ratio to lock or unlock resizing independently of preset selection.
 
 Under Help → Install in File Explorer, click Install in File Explorer to add

@@ -1598,10 +1598,12 @@ class Application(QObject):
         self.preset_group.setExclusive(True)
 
     def choose_preset(self, button):
-        self.set_preset(button.text())
-        self.apply_preset()
-        if ":" in button.text():
-            self.center()
+        name = button.text()
+        self.set_preset(name)
+        ratio = self.width / self.height if name == "Original" else RATIOS[name]
+        w = min(self.width, self.height * ratio)
+        h = w / ratio
+        self.set_rect(((self.width - w) / 2, (self.height - h) / 2, w, h))
 
     def apply_preset(self):
         name = self.selected_preset

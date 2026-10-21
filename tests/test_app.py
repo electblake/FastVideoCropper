@@ -489,9 +489,9 @@ def test_load_crop_rotate_export(controller, qtbot, source, tmp_path):
     c.rotate(3)
     assert c.rect() == (20, 30, 160, 120)
     qtbot.mouseClick(c.preset_buttons["Square"], Qt.MouseButton.LeftButton)
-    assert c.rect()[2:] == (120, 120)
+    assert c.rect()[2:] == (240, 240)
     c.center()
-    assert c.rect() == (100, 60, 120, 120)
+    assert c.rect() == (40, 0, 240, 240)
     c.replace_segments([(2.3, 5.7)])
     c.window.grab().save(str(tmp_path / "window.png"))
     c.export()
@@ -502,7 +502,7 @@ def test_load_crop_rotate_export(controller, qtbot, source, tmp_path):
     assert c.output.exists()
     c.load(1)
     qtbot.waitUntil(lambda: c.ready and c.player.duration() == 8000, timeout=15000)
-    assert c.rect() == (100, 60, 120, 120)
+    assert c.rect() == (40, 0, 240, 240)
 
 
 @pytest.mark.parametrize("floating", [False, True])
@@ -840,14 +840,13 @@ def test_ratio_presets_center_and_preserve_saved_position(
     c.rotate(rotation)
     for locked in (False, True):
         c.lock.setChecked(locked)
-        for name, ratio in app.RATIOS.items():
-            if ":" not in name:
-                continue
-            c.set_rect((10, 20, 160, 120))
+        c.set_rect((10, 20, 160, 120))
+        for name in list(app.RATIOS) * 3:
+            ratio = c.width / c.height if name == "Original" else app.RATIOS[name]
             qtbot.mouseClick(c.preset_buttons[name], Qt.MouseButton.LeftButton)
             x, y, w, h = c.rect()
             assert w / h == pytest.approx(ratio)
-            assert max(w / 160, h / 120) == pytest.approx(1)
+            assert max(w / c.width, h / c.height) == pytest.approx(1)
             assert x + w / 2 == pytest.approx(c.width / 2)
             assert y + h / 2 == pytest.approx(c.height / 2)
             assert c.selected_preset == name
@@ -858,8 +857,14 @@ def test_ratio_presets_center_and_preserve_saved_position(
     c.preset_buttons["9:16"].setFocus()
     c.set_rect((10, 20, 160, 120))
     qtbot.keyClick(c.preset_buttons["9:16"], Qt.Key.Key_Space)
+    height = min(c.height, c.width * 16 / 9)
+    width = height * 9 / 16
     assert c.rect() == pytest.approx(
-        ((c.width - 67.5) / 2, (c.height - 120) / 2, 67.5, 120)
+        ((c.width - width) / 2, (c.height - height) / 2, width, height)
+    )
+    qtbot.keyClick(c.preset_buttons["9:16"], Qt.Key.Key_Space)
+    assert c.rect() == pytest.approx(
+        ((c.width - width) / 2, (c.height - height) / 2, width, height)
     )
     c.set_rect((10, 20, 67.5, 120))
     c.segment_list.setCurrentRow(1)

@@ -56,6 +56,15 @@ def step():
         controller.merge_segments_button.click()
         assert len(controller.segments) == 1
         assert (controller.segments[0].start, controller.segments[0].end) == (0.2, 1.2)
+        for name in list(application.RATIOS) * 3:
+            controller.preset_buttons[name].click()
+            x, y, width, height = controller.rect()
+            assert (
+                abs(max(width / controller.width, height / controller.height) - 1)
+                < 1e-9
+            )
+            assert abs(x + width / 2 - controller.width / 2) < 1e-9
+            assert abs(y + height / 2 - controller.height / 2) < 1e-9
         controller.set_rect((20, 20, 160, 120))
         controller.rotate(1)
         started = True
@@ -92,6 +101,7 @@ def step():
                     "video_dimensions": [120, 160],
                     "frames": 10,
                     "playback": "Qt Multimedia decoded source",
+                    "presets": "Three cycles retained full-frame crop dimensions",
                     "audio": "aac",
                 },
                 indent=2,

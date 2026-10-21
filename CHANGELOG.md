@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-10-20
+
+### Fixed
+
+- Calculated every aspect-ratio preset from the full, rotation-adjusted video dimensions and centered the crop, preventing repeated preset switching from shrinking the selection.
+- Preserved manually adjusted crop geometry and position when restoring saved segments and videos.
+
 ## [0.7.2] - 2026-10-20
 
 ### Changed
