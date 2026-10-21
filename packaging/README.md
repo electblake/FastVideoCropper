@@ -24,7 +24,7 @@ export. Uninstall preserves these archives for later reinstalls; deleting the
 cache causes the next install to download them again. The first install using
 this cache still downloads the archives, even if an older installation exists.
 uv downloads Python 3.13.12 into the application's private `python` directory,
-then installs the application and locked runtime packages into
+when its pinned executable is absent, then installs the application and locked runtime packages into
 `application/.venv`. It does not register Python or change PATH. Developer
 packages are excluded. No Python, Qt or FFmpeg binaries are embedded in Setup.
 
