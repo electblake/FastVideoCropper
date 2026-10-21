@@ -20,7 +20,7 @@ def test_padding_in_source_pixels(padding, expected):
 
 
 @pytest.mark.parametrize(
-    "start,end,turns,expected_size",
+    "start,end,rotation,expected_size",
     [
         (2.3, 5.7, 0, (160, 120)),
         (0, 2, 1, (160, 120)),
@@ -28,8 +28,8 @@ def test_padding_in_source_pixels(padding, expected):
         (0, 8, 3, (160, 120)),
     ],
 )
-def test_real_crop_and_trim(source, start, end, turns, expected_size):
-    job = Export(source, (20, 30, 160, 120), turns, start, end)
+def test_real_crop_and_trim(source, start, end, rotation, expected_size):
+    job = Export(source, (20, 30, 160, 120), rotation, start, end)
     subprocess.run(
         ["ffmpeg", *job.arguments()],
         check=True,
@@ -56,7 +56,9 @@ def test_real_crop_and_trim(source, start, end, turns, expected_size):
     assert float(audio["duration"]) == pytest.approx(end - start, abs=0.05)
     assert video["codec_name"] == "hevc"
     assert audio["codec_name"] == "aac"
-    rotation = ["", "transpose=clock,", "hflip,vflip,", "transpose=cclock,"][turns]
+    rotation_filter = ["", "transpose=clock,", "hflip,vflip,", "transpose=cclock,"][
+        rotation
+    ]
     expected = subprocess.check_output(
         [
             "ffmpeg",
@@ -67,7 +69,7 @@ def test_real_crop_and_trim(source, start, end, turns, expected_size):
             "-i",
             str(source),
             "-vf",
-            rotation + "crop=160:120:20:30",
+            rotation_filter + "crop=160:120:20:30",
             "-frames:v",
             "1",
             "-f",

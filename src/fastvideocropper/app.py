@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
@@ -103,7 +104,7 @@ class Application(QObject):
         self.paths = []
         self.index = 0
         self.done = set()
-        self.turns = 0
+        self.rotation = 0
         self.width = self.height = 1.0
         self.pixel_width = self.pixel_height = 1.0
         self.ready = False
@@ -265,24 +266,40 @@ class Application(QObject):
         root = QWidget()
         layout = QVBoxLayout(root)
         self.window.setCentralWidget(root)
+        self.files_dock = QDockWidget("Files", self.window)
+        self.files_dock.setObjectName("filesDock")
+        files = QWidget()
+        files_layout = QVBoxLayout(files)
+        self.files_dock.setWidget(files)
+        self.window.addDockWidget(
+            Qt.DockWidgetArea.LeftDockWidgetArea, self.files_dock
+        )
+        view_menu.addAction(self.files_dock.toggleViewAction())
         folder_form = QFormLayout()
+        folder_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self.folder = QLineEdit(self.settings.value("folder_path", ""))
         self.folder.textChanged.connect(
             lambda value: self.settings.setValue("folder_path", value)
         )
         folder_form.addRow("&Folder", self.folder)
-        layout.addLayout(folder_form)
+        files_layout.addLayout(folder_form)
+        self.open_button = self.button("Open videos…", self.open_files, files_layout)
+        self.file_list = QListWidget()
+        self.file_list.setAccessibleName("Input videos")
+        self.file_list.setTextElideMode(Qt.TextElideMode.ElideMiddle)
+        self.file_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.file_list.currentRowChanged.connect(self.select_file)
+        files_layout.addWidget(self.file_list, 1)
         header = QHBoxLayout()
-        self.open_button = self.button("Open videos…", self.open_files, header)
         self.open_action = action
         self.previous = self.button(
             "Previous", lambda: self.load(self.index - 1), header
         )
         self.next = self.button("Next", lambda: self.load(self.index + 1), header)
-        self.title = QLabel("Open or drop videos to begin")
-        self.title.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        header.addWidget(self.title, 1)
-        layout.addLayout(header)
+        files_layout.addLayout(header)
+        self.file_summary = QLabel("Open or drop videos to begin")
+        self.file_summary.setWordWrap(True)
+        files_layout.addWidget(self.file_summary)
         splitter = self.splitter = QSplitter()
         layout.addWidget(splitter, 1)
         left = QWidget()
@@ -517,7 +534,9 @@ class Application(QObject):
         rotation = QVBoxLayout()
         self.button("Rotate left", lambda: self.rotate(3), rotation)
         self.button("Rotate right", lambda: self.rotate(1), rotation)
-        self.button("Reset rotation", lambda: self.rotate((-self.turns) % 4), rotation)
+        self.button(
+            "Reset rotation", lambda: self.rotate((-self.rotation) % 4), rotation
+        )
         form.addRow(rotation)
         self.lock = QCheckBox("&Lock aspect ratio")
         form.addRow(self.lock)
@@ -684,7 +703,9 @@ class Application(QObject):
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([750, 420])
-        self.window.resizeDocks([self.segments_dock], [320], Qt.Orientation.Horizontal)
+        self.window.resizeDocks(
+            [self.files_dock, self.segments_dock], [260, 320], Qt.Orientation.Horizontal
+        )
         self.default_window_state = self.window.saveState(1)
         self.default_splitter_state = splitter.saveState()
         tabs.setCurrentIndex(self.settings.value("active_tab", 0, int))
@@ -976,7 +997,7 @@ class Application(QObject):
                 start,
                 end,
                 rect,
-                self.turns,
+                self.rotation,
                 self.selected_preset,
                 self.lock.isChecked(),
                 *(field.value() for field in self.padding_fields),
@@ -1005,7 +1026,7 @@ class Application(QObject):
                 0.0,
                 self.player.duration() / 1000,
                 (x / self.width, y / self.height, w / self.width, h / self.height),
-                self.turns,
+                self.rotation,
                 self.selected_preset,
                 self.lock.isChecked(),
                 *(field.value() for field in self.padding_fields),
@@ -1062,14 +1083,14 @@ class Application(QObject):
     def segment_text(self, index):
         segment = self.segments[index]
         width, height = self.source_width, self.source_height
-        if (self.source_rotation + segment.turns) % 2:
+        if (self.source_rotation + segment.rotation) % 2:
             width, height = height, width
         x, y, w, h = segment.rect
         return (
             f"{index + 1:02d}   {segment.start:.3f} – {segment.end:.3f} s\n"
             f"Duration {segment.end - segment.start:.3f} s\n"
             f"Crop {w * width:.0f} × {h * height:.0f} at {x * width:.0f}, {y * height:.0f}\n"
-            f"{segment.preset} • Rotation {segment.turns * 90}°\n"
+            f"{segment.preset} • Rotation {segment.rotation * 90}°\n"
             f"Padding X {segment.padding_x:+d} px / Y {segment.padding_y:+d} px per side"
         )
 
@@ -1122,7 +1143,7 @@ class Application(QObject):
         segment = self.segments[self.active_segment]
         x, y, w, h = self.rect()
         segment.rect = x / self.width, y / self.height, w / self.width, h / self.height
-        segment.turns = self.turns
+        segment.rotation = self.rotation
         segment.preset = self.selected_preset
         segment.locked = self.lock.isChecked()
         segment.padding_x, segment.padding_y = (
@@ -1142,7 +1163,7 @@ class Application(QObject):
         self.save_segment()
         self.restoring_segment = True
         segment = self.segments[index]
-        self.rotate((segment.turns - self.turns) % 4)
+        self.rotate((segment.rotation - self.rotation) % 4)
         for field, value in zip(
             self.padding_fields, (segment.padding_x, segment.padding_y)
         ):
@@ -1195,13 +1216,33 @@ class Application(QObject):
             self.paths = [Path(p) for p in paths]
             self.load(0)
 
+    def refresh_files(self):
+        self.file_list.blockSignals(True)
+        self.file_list.clear()
+        for path in self.paths:
+            status = "Done" if path in self.done else "Pending"
+            item = QListWidgetItem(f"{path.name}\n{status}", self.file_list)
+            item.setToolTip(str(path))
+            item.setData(Qt.ItemDataRole.UserRole, path)
+        if self.paths:
+            self.file_list.setCurrentRow(self.index)
+            self.file_list.scrollToItem(self.file_list.currentItem())
+            self.file_summary.setText(f"{self.index + 1} of {len(self.paths)}")
+        else:
+            self.file_summary.setText("Open or drop videos to begin")
+        self.file_list.blockSignals(False)
+
+    def select_file(self, index):
+        if index >= 0 and index != self.index:
+            self.load(index)
+
     def save_crop_settings(self):
         x, y, w, h = self.rect()
         self.settings.setValue(
             "crop/rect",
             QRectF(x / self.width, y / self.height, w / self.width, h / self.height),
         )
-        self.settings.setValue("crop/turns", self.turns)
+        self.settings.setValue("crop/turns", self.rotation)
         self.settings.setValue("crop/preset", self.selected_preset)
         self.settings.setValue("crop/locked", self.lock.isChecked())
         self.settings.setValue("crop/padding_x", self.padding_fields[0].value())
@@ -1219,8 +1260,9 @@ class Application(QObject):
         self.ready = False
         self.loading = True
         self.index = index
+        self.refresh_files()
         self.player.stop()
-        self.turns = 0
+        self.rotation = 0
         self.lock.setChecked(False)
         for field in self.padding_fields:
             field.blockSignals(True)
@@ -1258,10 +1300,6 @@ class Application(QObject):
                     self.source_rotation = data["rotation"] // 90
         self.refresh_segments()
         self.player.setSource(QUrl.fromLocalFile(str(self.paths[self.index])))
-        self.title.setText(
-            f"{self.index + 1}/{len(self.paths)} • {self.paths[self.index].name}"
-            + (" • Done" if self.paths[self.index] in self.done else " • Pending")
-        )
         self.output = None
         self.update_enabled()
         self.player.pause()
@@ -1271,7 +1309,7 @@ class Application(QObject):
             return
         self.video.setSize(size)
         self.width, self.height = size.width(), size.height()
-        if self.turns % 2:
+        if self.rotation % 2:
             self.width, self.height = self.height, self.width
         self.apply_rotation()
         self.roi.maxBounds = QRectF(0, 0, self.width, self.height)
@@ -1327,7 +1365,7 @@ class Application(QObject):
             and not self.player.source().isEmpty()
         ):
             self.pixel_width, self.pixel_height = self.source_width, self.source_height
-            if (self.source_rotation + self.turns) % 2:
+            if (self.source_rotation + self.rotation) % 2:
                 self.pixel_width, self.pixel_height = (
                     self.pixel_height,
                     self.pixel_width,
@@ -1547,7 +1585,7 @@ class Application(QObject):
                 field.blockSignals(True)
                 field.setValue(value)
                 field.blockSignals(False)
-            self.turns = (self.turns + 1) % 4
+            self.rotation = (self.rotation + 1) % 4
             self.roi.maxBounds = QRectF(0, 0, self.width, self.height)
             self.set_rect(rect)
         self.apply_rotation()
@@ -1560,13 +1598,13 @@ class Application(QObject):
     def apply_rotation(self):
         transform = QTransform()
         w, h = self.video.size().width(), self.video.size().height()
-        if self.turns == 1:
+        if self.rotation == 1:
             transform.translate(h, 0)
-        elif self.turns == 2:
+        elif self.rotation == 2:
             transform.translate(w, h)
-        elif self.turns == 3:
+        elif self.rotation == 3:
             transform.translate(0, w)
-        transform.rotate(90 * self.turns)
+        transform.rotate(90 * self.rotation)
         self.video.setTransform(transform)
 
     def fit(self):
@@ -1613,7 +1651,7 @@ class Application(QObject):
         self.export_jobs = []
         for index, segment in enumerate(self.segments):
             width, height = self.source_width, self.source_height
-            if (self.source_rotation + segment.turns) % 2:
+            if (self.source_rotation + segment.rotation) % 2:
                 width, height = height, width
             x, y, w, h = segment.rect
             self.export_jobs.append(
@@ -1626,7 +1664,7 @@ class Application(QObject):
                         width,
                         height,
                     ),
-                    segment.turns,
+                    segment.rotation,
                     segment.start,
                     segment.end,
                     self.square.isChecked(),
@@ -1898,9 +1936,7 @@ class Application(QObject):
                 f"Complete — {len(self.export_jobs)} segments saved"
             )
             self.done.add(self.job.source)
-            self.title.setText(
-                f"{self.index + 1}/{len(self.paths)} • {self.job.source.name} • Done"
-            )
+            self.refresh_files()
             if self.notify.isChecked():
                 QApplication.beep()
                 QApplication.alert(self.window)
@@ -1923,7 +1959,7 @@ class Application(QObject):
                     self.view.hide()
                     self.paths = []
                     self.index = 0
-                    self.title.setText("Open or drop videos to begin")
+                    self.refresh_files()
                 if self.quit_done.isChecked():
                     self.countdown("quit", self.quit_delay.value())
         self.update_enabled()
@@ -1984,6 +2020,7 @@ class Application(QObject):
         self.check_update_button.setEnabled(not busy)
         self.install_button.setEnabled(not busy)
         self.folder.setEnabled(not busy)
+        self.file_list.setEnabled(bool(self.paths) and not busy)
         self.count_now.setEnabled(self.count_action == "quit" or self.ready)
         self.open_button.setEnabled(not busy)
         self.open_action.setEnabled(not busy)
@@ -2021,6 +2058,7 @@ class Application(QObject):
     def update_busy(self, busy):
         self.explorer_dialog.setEnabled(not busy)
         self.window.centralWidget().setEnabled(not busy)
+        self.files_dock.setEnabled(not busy)
         self.segments_dock.setEnabled(not busy)
         self.window.menuBar().setEnabled(not busy)
         self.window.setAcceptDrops(not busy)

@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-20
+
 ### Added
 
+- Added a dockable Files list with direct video selection, pending/completed status, and a View menu visibility toggle.
 - Added Copy Logs to Clipboard and Clear Logs buttons beneath the Process log, with status-bar confirmation for both actions.
+
+### Changed
+
+- Cached pinned uv and FFmpeg download archives across installs, updates, and uninstalls, verifying their hashes before extraction.
 
 ### Removed
 

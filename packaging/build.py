@@ -19,6 +19,7 @@ for name, filename in (("Uv", "uv.json"), ("FFmpeg", "vendor.json")):
     for field, suffix in (
         ("url", "Url"),
         ("sha256", "Hash"),
+        ("download_size", "DownloadSize"),
         ("extracted_size", "Size"),
     ):
         definitions.append(f'#define {name}{suffix} "{manifest[field]}"')

@@ -37,8 +37,12 @@ Source: "..\src\fastvideocropper\*.ico"; DestDir: "{app}\application\src\fastvid
 Source: "THIRD-PARTY.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "uv.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "vendor.json"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#UvUrl}"; DestDir: "{app}\tools\uv"; DestName: "uv.zip"; ExternalSize: {#UvSize}; Hash: "{#UvHash}"; Flags: external download extractarchive ignoreversion recursesubdirs createallsubdirs
-Source: "{#FFmpegUrl}"; DestDir: "{app}\tools\ffmpeg"; DestName: "ffmpeg.zip"; ExternalSize: {#FFmpegSize}; Hash: "{#FFmpegHash}"; Flags: external download extractarchive ignoreversion recursesubdirs createallsubdirs
+; Matches platformdirs.user_cache_path(MyAppName, appauthor=False) on Windows.
+; Keep hash-addressed archives across upgrades and uninstall; verify on extraction.
+Source: "{#UvUrl}"; DestDir: "{localappdata}\{#MyAppName}\Cache\downloads"; DestName: "uv-{#UvHash}.zip"; ExternalSize: {#UvDownloadSize}; Hash: "{#UvHash}"; Flags: external download ignoreversion onlyifdoesntexist uninsneveruninstall
+Source: "{localappdata}\{#MyAppName}\Cache\downloads\uv-{#UvHash}.zip"; DestDir: "{app}\tools\uv"; ExternalSize: {#UvSize}; Hash: "{#UvHash}"; Flags: external extractarchive ignoreversion recursesubdirs createallsubdirs
+Source: "{#FFmpegUrl}"; DestDir: "{localappdata}\{#MyAppName}\Cache\downloads"; DestName: "ffmpeg-{#FFmpegHash}.zip"; ExternalSize: {#FFmpegDownloadSize}; Hash: "{#FFmpegHash}"; Flags: external download ignoreversion onlyifdoesntexist uninsneveruninstall
+Source: "{localappdata}\{#MyAppName}\Cache\downloads\ffmpeg-{#FFmpegHash}.zip"; DestDir: "{app}\tools\ffmpeg"; ExternalSize: {#FFmpegSize}; Hash: "{#FFmpegHash}"; Flags: external extractarchive ignoreversion recursesubdirs createallsubdirs
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked

@@ -14,7 +14,7 @@ class CropScan:
     def arguments(self):
         filters = [f"trim=duration={self.segment.end - self.segment.start:.7f}"]
         filters += [[], ["transpose=clock"], ["hflip", "vflip"], ["transpose=cclock"]][
-            self.segment.turns
+            self.segment.rotation
         ]
         if self.options["mode"] == "mvedges":
             filters.append("mestimate")

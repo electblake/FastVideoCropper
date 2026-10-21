@@ -8,7 +8,7 @@ from pathlib import Path
 class Export:
     source: Path
     rect: tuple[float, float, float, float]
-    turns: int
+    rotation: int
     start: float
     end: float
     square_pixels: bool = False
@@ -30,7 +30,7 @@ class Export:
     def arguments(self):
         x, y, w, h = self.rect
         filters = [[], ["transpose=clock"], ["hflip", "vflip"], ["transpose=cclock"]][
-            self.turns
+            self.rotation
         ].copy()
         filters.append(f"crop={w:.7f}:{h:.7f}:{x:.7f}:{y:.7f}")
         if self.exact_crop:

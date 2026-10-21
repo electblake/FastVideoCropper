@@ -10,7 +10,7 @@ class Segment:
     start: float
     end: float
     rect: tuple[float, float, float, float]
-    turns: int
+    rotation: int
     preset: str
     locked: bool
     padding_x: int = 0

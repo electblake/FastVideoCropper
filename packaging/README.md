@@ -10,7 +10,19 @@ uv sync --locked
 The installer embeds only application source, lock file, metadata, icon, and
 notices. Inno Setup downloads and verifies the SHA-256 of the pinned uv 0.13.4
 and FFmpeg 8.1.2 ZIP archives before extracting them using its native archive
-support. URLs, hashes and expanded sizes are in `uv.json` and `vendor.json`.
+support. URLs, hashes, download sizes and expanded sizes are in `uv.json` and
+`vendor.json`. Archives are retained under
+`%LOCALAPPDATA%\FastVideoCropper\Cache\downloads`, matching
+`platformdirs.user_cache_path("FastVideoCropper", appauthor=False)` on Windows.
+Inno Setup resolves this location before Python is installed. Archive filenames
+include their pinned SHA-256: installs and updates reuse an existing archive,
+while a changed hash gets a new download. Each archive is hash-verified before
+extraction into the application's private tools directory. A corrupt cached
+archive fails verification; it is not silently replaced. The application runs
+from its installed copies, so clearing the cache does not break playback or
+export. Uninstall preserves these archives for later reinstalls; deleting the
+cache causes the next install to download them again. The first install using
+this cache still downloads the archives, even if an older installation exists.
 uv downloads Python 3.13.12 into the application's private `python` directory,
 then installs the application and locked runtime packages into
 `application/.venv`. It does not register Python or change PATH. Developer

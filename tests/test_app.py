@@ -137,7 +137,7 @@ def test_automatically_create_first_segment(
     )
     assert [(s.start, s.end) for s in c.segments] == [(0, 8)]
     assert c.rect() == ((20, 30, 120, 120) if remember else (0, 0, 320, 240))
-    assert c.segments[0].turns == (1 if remember else 0)
+    assert c.segments[0].rotation == (1 if remember else 0)
     assert c.segments[0].preset == ("Square" if remember else "Custom")
     assert c.segments[0].locked == remember
     assert (c.segments[0].padding_x, c.segments[0].padding_y) == (
@@ -213,18 +213,18 @@ def test_remember_crop_between_files_and_sessions(
     assert c.settings.value("crop/padding_y", type=int) == -3
     assert not c.segments
     assert c.rect() == ((20, 30, 120, 120) if remember else (0, 0, 320, 240))
-    assert c.turns == (1 if remember else 0)
+    assert c.rotation == (1 if remember else 0)
     assert c.selected_preset == ("Square" if remember else "Custom")
     assert c.lock.isChecked() == remember
     assert [f.value() for f in c.padding_fields] == ([7, -3] if remember else [0, 0])
     c.add_segment_button.click()
-    assert c.segments[0].turns == c.turns
+    assert c.segments[0].rotation == c.rotation
     assert c.segments[0].padding_x == (7 if remember else 0)
     c.set_rect((0, 0, 60, 60))
     c.previous.click()
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
     assert c.rect() == (20, 30, 120, 120)
-    assert c.turns == 1
+    assert c.rotation == 1
     c.window.close()
 
     restored = app.Application()
@@ -235,7 +235,7 @@ def test_remember_crop_between_files_and_sessions(
     restored.load(0)
     qtbot.waitUntil(lambda: restored.ready, timeout=15000)
     assert restored.rect() == ((20, 30, 120, 120) if remember else (0, 0, 320, 240))
-    assert restored.turns == (1 if remember else 0)
+    assert restored.rotation == (1 if remember else 0)
     assert restored.selected_preset == ("Square" if remember else "Custom")
     assert restored.lock.isChecked() == remember
     assert [f.value() for f in restored.padding_fields] == (
@@ -278,7 +278,7 @@ def test_remember_crop_different_dimensions_and_disable(
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
     assert c.rect() == (30, 60, 180, 180)
     assert c.selected_preset == "Square"
-    assert c.turns == 1 and c.lock.isChecked()
+    assert c.rotation == 1 and c.lock.isChecked()
     c.add_segment_button.click()
     assert c.segments[0].rect == (30 / 360, 60 / 640, 180 / 360, 180 / 640)
     c.clear_segments_button.click()
@@ -286,7 +286,7 @@ def test_remember_crop_different_dimensions_and_disable(
     c.load(1)
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
     assert c.rect() == (0, 0, 640, 360)
-    assert c.turns == 0 and not c.lock.isChecked()
+    assert c.rotation == 0 and not c.lock.isChecked()
     assert c.selected_preset == "Custom"
 
 
@@ -493,7 +493,7 @@ def test_detect_select_clear_segments(
     c.rotate(1)
     first_rect = c.rect()
     c.segment_list.setCurrentRow(1)
-    assert c.turns == 0
+    assert c.rotation == 0
     assert c.rect() == (0, 0, 320, 240)
     assert not c.lock.isChecked()
     assert (c.segments[c.active_segment].start, c.segments[c.active_segment].end) == (
@@ -502,7 +502,7 @@ def test_detect_select_clear_segments(
     )
     c.set_rect((40, 50, 100, 80))
     c.segment_list.setCurrentRow(0)
-    assert c.turns == 1
+    assert c.rotation == 1
     assert c.rect() == first_rect
     assert c.lock.isChecked()
     c.segment_list.setCurrentRow(1)
@@ -545,7 +545,7 @@ def test_export_segments_with_independent_crops(controller, qtbot, source, previ
     # Exercise both a changed selection and a first segment already selected.
     if not preview:
         c.segment_list.setCurrentRow(0)
-    saved = [(s.rect, s.turns, s.preset, s.locked) for s in c.segments]
+    saved = [(s.rect, s.rotation, s.preset, s.locked) for s in c.segments]
     observed = []
 
     def capture_export_ui():
@@ -553,7 +553,7 @@ def test_export_segments_with_independent_crops(controller, qtbot, source, previ
             (
                 c.segment_list.currentRow(),
                 c.rect(),
-                c.turns,
+                c.rotation,
                 c.lock.isChecked(),
                 [field.value() for field in c.fields[2:]],
                 c.player.isPlaying(),
@@ -567,14 +567,14 @@ def test_export_segments_with_independent_crops(controller, qtbot, source, previ
     assert c.window.statusBar().currentMessage() == "Complete — 2 segments saved"
     assert source in c.done
     assert len(observed) == 2
-    for index, (row, rect, turns, locked, size, playing) in enumerate(observed):
+    for index, (row, rect, rotation, locked, size, playing) in enumerate(observed):
         assert row == index
         assert rect == [(20, 30, 160, 120), (10, 20, 100, 200)][index]
-        assert turns == index
+        assert rotation == index
         assert locked == saved[index][3]
         assert size == list(rect[2:])
         assert not playing
-    assert [(s.rect, s.turns, s.preset, s.locked) for s in c.segments] == saved
+    assert [(s.rect, s.rotation, s.preset, s.locked) for s in c.segments] == saved
     for job, size, frames in zip(c.export_jobs, [(160, 120), (100, 200)], [20, 60]):
         metadata = json.loads(
             subprocess.check_output(
@@ -610,17 +610,17 @@ def test_scrubber_selects_segment_without_jumping_to_start(controller, qtbot, so
     c.rotate(1)
     c.set_rect((10, 20, 100, 200))
     c.lock.setChecked(True)
-    saved = [(s.rect, s.turns, s.locked) for s in c.segments]
+    saved = [(s.rect, s.rotation, s.locked) for s in c.segments]
 
     for position, index in [(1500, 0), (2000, 1), (5750, 1), (0, 0), (8000, 1)]:
         c.seek.setValue(position)
         assert c.segment_list.currentRow() == index
         assert c.active_segment == index
         assert c.player.position() == position
-        assert c.turns == saved[index][1]
+        assert c.rotation == saved[index][1]
         assert c.lock.isChecked() == saved[index][2]
         assert c.rect() == [(20, 30, 160, 120), (10, 20, 100, 200)][index]
-    assert [(s.rect, s.turns, s.locked) for s in c.segments] == saved
+    assert [(s.rect, s.rotation, s.locked) for s in c.segments] == saved
 
 
 def test_segment_ranges_preserve_precision_when_switching(controller, qtbot, source):
@@ -739,9 +739,9 @@ def test_gpu_probe_keeps_event_loop_responsive(controller, qtbot, source, monkey
     assert not c.resolving_encoder
 
 
-@pytest.mark.parametrize("turns", [0, 1, 2, 3])
+@pytest.mark.parametrize("rotation", [0, 1, 2, 3])
 def test_ratio_presets_center_and_preserve_saved_position(
-    controller, qtbot, source, tmp_path, turns
+    controller, qtbot, source, tmp_path, rotation
 ):
     c = controller
     other = tmp_path / "next.mp4"
@@ -750,7 +750,7 @@ def test_ratio_presets_center_and_preserve_saved_position(
     c.load(0)
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
     c.replace_segments([(0, 4), (4, 8)])
-    c.rotate(turns)
+    c.rotate(rotation)
     for locked in (False, True):
         c.lock.setChecked(locked)
         for name, ratio in app.RATIOS.items():
@@ -833,6 +833,9 @@ def test_final_export_unloads_video(
     assert c.view.isVisible() == (not advance)
     assert c.export_button.isEnabled() == (not advance)
     assert c.count_timer.isActive() == quit_done
+    assert c.file_list.count() == (0 if advance else 1)
+    if not advance:
+        assert c.file_list.item(0).text() == f"{source.name}\nDone"
     if quit_done:
         assert c.count_action == "quit"
         assert c.count_now.isEnabled()
@@ -1259,6 +1262,8 @@ def test_auto_advance_with_automatic_segment(controller, qtbot, source, tmp_path
     assert c.rect() == (20, 30, 160, 120)
     assert c.count_timer.isActive()
     assert c.count_action == "export"
+    assert c.file_list.currentRow() == 1
+    assert c.file_list.item(0).text() == f"{source.name}\nDone"
     c.count_execute()
     qtbot.waitUntil(lambda: not c.running, timeout=30000)
     assert c.done == {source, other}
@@ -1287,14 +1292,14 @@ def test_auto_advance_and_countdown(controller, qtbot, source):
 
 
 @pytest.mark.parametrize(
-    "turns,rect,size",
+    "rotation,rect,size",
     [
         (0, (80, 0, 160, 240), (320, 240)),
         (1, (0, 80, 240, 160), (120, 160)),
     ],
 )
 def test_anamorphic_view_maps_to_source_pixels(
-    controller, qtbot, source, tmp_path, turns, rect, size
+    controller, qtbot, source, tmp_path, rotation, rect, size
 ):
     path = tmp_path / "wide-pixels.mp4"
     subprocess.run(
@@ -1327,7 +1332,7 @@ def test_anamorphic_view_maps_to_source_pixels(
     assert c.width == 640
     assert c.fields[2].value() == 320
     c.set_rect((160, 0, 320, 240))
-    c.rotate(turns)
+    c.rotate(rotation)
     c.square.setChecked(True)
     c.export()
     assert c.job.rect == rect
@@ -1412,6 +1417,9 @@ def test_drop_on_video_viewport(controller, qtbot, source):
     QApplication.sendEvent(controller.viewport, drop)
     qtbot.waitUntil(lambda: controller.ready, timeout=15000)
     assert controller.paths == [source]
+    assert controller.file_list.count() == 1
+    assert controller.file_list.currentRow() == 0
+    assert controller.file_list.item(0).data(Qt.ItemDataRole.UserRole) == source
 
 
 @pytest.mark.parametrize("exit_code", [0, 1])
@@ -1551,14 +1559,14 @@ def test_preferences_restored_from_config_file(controller, qtbot, source, tmp_pa
     assert restored.settings.contains("mainWindow/geometry")
     assert restored.settings.contains("mainWindow/state")
     assert restored.settings.contains("mainWindow/splitterState")
-    assert not {"geometry", "turns", "preset", "centered", "lock"}.intersection(
+    assert not {"geometry", "rotation", "preset", "centered", "lock"}.intersection(
         restored.settings.allKeys()
     )
     restored.paths = [source]
     restored.load(0)
     qtbot.waitUntil(lambda: restored.ready, timeout=15000)
     assert restored.segments == []
-    assert restored.turns == 0
+    assert restored.rotation == 0
     assert restored.rect() == (0, 0, 320, 240)
     assert not restored.lock.isChecked()
 
@@ -1594,13 +1602,13 @@ def test_crop_settings_stay_with_video(controller, qtbot, source, tmp_path):
     c.lock.setChecked(True)
     c.load(1)
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
-    assert c.turns == 0
+    assert c.rotation == 0
     assert c.rect() == (0, 0, 320, 240)
     assert not c.lock.isChecked()
     c.replace_segments([(0, 8)])
     c.load(0)
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
-    assert c.turns == 1
+    assert c.rotation == 1
     assert c.rect() == (10, 20, 100, 200)
     assert c.lock.isChecked()
 
@@ -1700,9 +1708,9 @@ def test_split_segment_in_place(controller, qtbot, source, trigger):
     assert c.segments[0] is before
     assert c.segments[3] is after
     for segment in c.segments[1:3]:
-        assert (segment.rect, segment.turns, segment.preset, segment.locked) == (
+        assert (segment.rect, segment.rotation, segment.preset, segment.locked) == (
             original.rect,
-            original.turns,
+            original.rotation,
             original.preset,
             original.locked,
         )
@@ -1813,8 +1821,10 @@ def test_player_navigation_controls(controller, qtbot, source):
     assert not c.navigation_buttons["next"].isEnabled()
 
 
-@pytest.mark.parametrize("trigger,turns,sar", [("menu", 0, 1), ("button", 1, 2)])
-def test_detect_crop_selected_segment(controller, qtbot, tmp_path, trigger, turns, sar):
+@pytest.mark.parametrize("trigger,rotation,sar", [("menu", 0, 1), ("button", 1, 2)])
+def test_detect_crop_selected_segment(
+    controller, qtbot, tmp_path, trigger, rotation, sar
+):
     path = tmp_path / "bordered.mp4"
     subprocess.run(
         [
@@ -1847,7 +1857,7 @@ def test_detect_crop_selected_segment(controller, qtbot, tmp_path, trigger, turn
     assert not c.detect_crop_action.isEnabled()
     c.replace_segments([(0, 2), (2, 4)])
     c.segment_list.setCurrentRow(1)
-    c.rotate(turns)
+    c.rotate(rotation)
     c.lock.setChecked(True)
     original = c.segments[0].rect
 
@@ -1870,7 +1880,7 @@ def test_detect_crop_selected_segment(controller, qtbot, tmp_path, trigger, turn
         c.window.statusBar().currentMessage()
         == "Crop detection complete — selected segment updated"
     )
-    assert c.rect() == ((40, 20, 240, 200) if turns == 0 else (20, 80, 200, 480))
+    assert c.rect() == ((40, 20, 240, 200) if rotation == 0 else (20, 80, 200, 480))
     assert c.segments[0].rect == original
     assert c.active_segment == 1
     assert c.lock.isChecked()
@@ -1955,11 +1965,12 @@ def test_segments_dock_layout_persistence_and_reset(controller, qtbot, placement
         if action.text() == "&View"
     )
     assert view_menu.actions() == [
+        c.files_dock.toggleViewAction(),
         toggle,
-        view_menu.actions()[1],
+        view_menu.actions()[2],
         c.reset_layout_action,
     ]
-    assert view_menu.actions()[1].isSeparator()
+    assert view_menu.actions()[2].isSeparator()
     assert toggle.isCheckable() and toggle.isChecked()
     assert c.window.dockWidgetArea(dock) == Qt.DockWidgetArea.RightDockWidgetArea
     for widget in (
@@ -2045,3 +2056,89 @@ def test_hidden_segments_stay_linked_to_timeline(controller, qtbot, source):
     c.clear_segments_button.click()
     assert c.segment_list.count() == len(c.segment_regions) == 0
     assert not c.export_button.isEnabled()
+
+
+def test_files_selection_and_replacement(
+    controller, qtbot, source, tmp_path, monkeypatch
+):
+    c = controller
+    other = tmp_path / source.name
+    other.write_bytes(source.read_bytes())
+    assert c.file_list.count() == 0
+    assert not c.file_list.isEnabled()
+    monkeypatch.setattr(
+        app.QFileDialog,
+        "getOpenFileNames",
+        lambda *args: ([str(source), str(other)], ""),
+    )
+    c.open_button.click()
+    assert not c.file_list.isEnabled()
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert c.file_list.count() == 2
+    assert c.file_list.currentRow() == c.index == 0
+    assert c.file_summary.text() == "1 of 2"
+    assert c.file_list.item(1).data(Qt.ItemDataRole.UserRole) == other
+    assert c.file_list.item(1).toolTip() == str(other)
+    c.add_segment_button.click()
+    c.set_rect((20, 30, 160, 120))
+    c.file_list.setFocus()
+    qtbot.keyClick(c.file_list, Qt.Key.Key_Down)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert c.index == c.file_list.currentRow() == 1
+    assert c.player.source().toLocalFile() == str(other).replace("\\", "/")
+    assert c.file_summary.text() == "2 of 2"
+    c.previous.click()
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert c.file_list.currentRow() == 0
+    assert c.rect() == (20, 30, 160, 120)
+    c.next.click()
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert c.file_list.currentRow() == 1
+    for state in ("running", "loading", "resolving_encoder"):
+        setattr(c, state, True)
+        c.update_enabled()
+        assert not c.file_list.isEnabled()
+        setattr(c, state, False)
+    c.update_enabled()
+    c.update_busy(True)
+    assert not c.files_dock.isEnabled()
+    c.update_busy(False)
+    assert c.file_list.isEnabled()
+    monkeypatch.setattr(
+        app.QFileDialog, "getOpenFileNames", lambda *args: ([str(source)], "")
+    )
+    c.open_action.trigger()
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert c.file_list.count() == 1
+    assert c.file_list.currentRow() == 0
+    assert c.rect() == (20, 30, 160, 120)
+
+
+@pytest.mark.parametrize("placement", ["right", "floating", "hidden"])
+def test_files_dock_persistence_and_reset(controller, qtbot, placement):
+    c = controller
+    dock = c.files_dock
+    assert dock.windowTitle() == "Files"
+    assert c.window.dockWidgetArea(dock) == Qt.DockWidgetArea.LeftDockWidgetArea
+    for widget in (c.folder, c.open_button, c.previous, c.next, c.file_list):
+        assert dock.isAncestorOf(widget)
+    c.window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
+    if placement == "floating":
+        dock.setFloating(True)
+    elif placement == "hidden":
+        dock.close()
+    c.window.close()
+    restored = app.Application()
+    qtbot.addWidget(restored.window)
+    restored.window.show()
+    dock = restored.files_dock
+    assert restored.window.dockWidgetArea(dock) == Qt.DockWidgetArea.RightDockWidgetArea
+    assert dock.isFloating() == (placement == "floating")
+    assert dock.isVisible() == (placement != "hidden")
+    restored.reset_layout_action.trigger()
+    assert restored.window.dockWidgetArea(dock) == Qt.DockWidgetArea.LeftDockWidgetArea
+    assert dock.isVisible() and not dock.isFloating()
+    dock.toggleViewAction().trigger()
+    assert not dock.isVisible()
+    dock.toggleViewAction().trigger()
+    assert dock.isVisible()
