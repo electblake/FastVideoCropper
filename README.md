@@ -120,7 +120,7 @@ See [component decisions](docs/components.md) and [coverage](docs/coverage.md).
 
 ## Windows installer
 
-Release 0.7.9 provides a small per-user Windows x64 online Setup executable.
+Release 0.7.10 provides a small per-user Windows x64 online Setup executable.
 It downloads uv, Python, the locked Qt/Python dependencies, FFmpeg and FFprobe.
 Installation requires Internet access; the installed app runs offline.
 See [release build instructions](packaging/README.md)
