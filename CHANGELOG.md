@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-10-20
+
+### Fixed
+
+- Removed the export preview's dependency on a video-frame callback to permit subsequent seeks, preventing a missing callback from stalling preview updates.
+
 ## [0.7.3] - 2026-10-20
 
 ### Fixed

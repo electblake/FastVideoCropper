@@ -686,6 +686,57 @@ def test_export_segments_with_independent_crops(controller, qtbot, source, previ
     assert c.export_jobs[1].output.name.endswith("_SEGMENT_002_CROPPED.mp4")
 
 
+def test_export_preview_keeps_segment_geometry_during_progress(
+    controller, qtbot, source, monkeypatch, tmp_path
+):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready and c.player.duration() == 8000, timeout=15000)
+    c.replace_segments([(0, 3), (3, 6)])
+    c.set_rect((20, 30, 160, 120))
+    c.padding_fields[0].setValue(-6)
+    c.segment_list.setCurrentRow(1)
+    c.rotate(1)
+    c.set_rect((10, 20, 100, 200))
+    c.padding_fields[0].setValue(4)
+    c.padding_fields[1].setValue(-2)
+    c.lock.setChecked(True)
+    c.preview.setChecked(True)
+    saved = [vars(segment).copy() for segment in c.segments]
+    arguments = app.Export.arguments
+
+    def realtime_arguments(job):
+        args = arguments(job)
+        return ["-re", *args[:-1], "-tune", "zerolatency", args[-1]]
+
+    monkeypatch.setattr(app.Export, "arguments", realtime_arguments)
+    c.export_with_encoder("libx265")
+    for index, expected in enumerate([(20, 30, 160, 120), (10, 20, 100, 200)]):
+        qtbot.waitUntil(
+            lambda index=index: c.export_index == index
+            and c.player.position() > (c.segments[index].start + 0.5) * 1000,
+            timeout=15000,
+        )
+        assert c.running
+        assert c.active_segment == c.segment_list.currentRow() == index
+        assert c.rect() == expected
+        assert c.rotation == index
+        assert c.lock.isChecked() == saved[index]["locked"]
+        assert [field.value() for field in c.fields[2:]] == list(expected[2:])
+        x, y, width, height = c.job.rect
+        assert c.padding_outline.rect().getRect() == (x, y, width, height)
+        assert [mask.rect().getRect() for mask in c.masks] == [
+            (0, 0, c.width, y),
+            (0, y + height, c.width, c.height - y - height),
+            (0, y, x, height),
+            (x + width, y, c.width - x - width, height),
+        ]
+        c.window.grab().save(str(tmp_path / f"export-preview-{index}.png"))
+    qtbot.waitUntil(lambda: not c.running, timeout=15000)
+    assert [vars(segment) for segment in c.segments] == saved
+
+
 def test_scrubber_selects_segment_without_jumping_to_start(controller, qtbot, source):
     c = controller
     c.paths = [source]

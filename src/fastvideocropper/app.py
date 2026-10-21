@@ -129,7 +129,6 @@ class Application(QObject):
         self.progress_values = {}
         self.export_log = ""
         self.container_rejected = False
-        self.seek_pending = False
         self.segments = []
         self.source_segments = {}
         self.active_segment = -1
@@ -1411,7 +1410,6 @@ class Application(QObject):
             self.countdown("export", self.auto_delay.value())
 
     def frame_changed(self, frame):
-        self.seek_pending = False
         if (
             not self.ready
             and frame.isValid()
@@ -1753,7 +1751,6 @@ class Application(QObject):
         self.progress_buffer = ""
         self.progress_values = {}
         self.processing_position = self.job.start
-        self.seek_pending = False
         self.progress.setValue(0)
         self.window.statusBar().showMessage(
             f"Starting segment {self.export_index + 1}/{len(self.export_jobs)} • "
@@ -1849,8 +1846,7 @@ class Application(QObject):
 
     def follow_progress(self):
         position = round(min(self.processing_position, self.job.end - 0.001) * 1000)
-        if not self.seek_pending and abs(self.player.position() - position) >= 100:
-            self.seek_pending = True
+        if abs(self.player.position() - position) >= 100:
             self.player.setPosition(position)
 
     def preview_changed(self):
