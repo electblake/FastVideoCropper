@@ -781,13 +781,15 @@ def test_segment_ranges_preserve_precision_when_switching(controller, qtbot, sou
 
 
 @pytest.mark.parametrize("close", [False, True])
+@pytest.mark.parametrize("auto_segment", [False, True])
 def test_detection_progress_and_cancel(
-    controller, qtbot, scene_video, monkeypatch, tmp_path, close
+    controller, qtbot, scene_video, monkeypatch, tmp_path, close, auto_segment
 ):
     c = controller
     c.paths = [scene_video]
     c.load(0)
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.auto_segment.setChecked(auto_segment)
     c.replace_segments([(0, 3), (3, 6)])
     c.output = tmp_path / "previous-output.mp4"
     c.output.write_bytes(b"previous export")
@@ -821,7 +823,8 @@ def test_detection_progress_and_cancel(
     qtbot.waitUntil(lambda: not c.running, timeout=3000)
     assert not c.detecting
     assert c.output.read_bytes() == b"previous export"
-    assert c.segments == []
+    assert [(s.start, s.end) for s in c.segments] == ([(0, 6)] if auto_segment else [])
+    assert c.segment_list.count() == len(c.segment_regions) == int(auto_segment)
     assert c.window.statusBar().currentMessage() == "Scene detection canceled"
 
 
@@ -2109,14 +2112,56 @@ def test_cancel_crop_detection(controller, qtbot, source, monkeypatch):
     assert c.detect_crop_action.isEnabled()
 
 
-@pytest.mark.parametrize("confirm", [False, True])
-def test_scene_detection_replacement_confirmation(
-    controller, qtbot, scene_video, confirm
+@pytest.mark.parametrize("auto_segment", [False, True])
+@pytest.mark.parametrize("result", ["failed", "empty"])
+def test_scene_detection_without_segments(
+    controller, qtbot, scene_video, monkeypatch, auto_segment, result
 ):
     c = controller
     c.paths = [scene_video]
     c.load(0)
     qtbot.waitUntil(lambda: c.ready and c.player.duration() == 6000, timeout=15000)
+    qtbot.waitUntil(lambda: not c.load_timer.isActive())
+    c.auto_segment.setChecked(auto_segment)
+    c.replace_segments([(0, 2), (2, 6)])
+    c.set_rect((20, 30, 160, 120))
+    monkeypatch.setattr(
+        QMessageBox, "warning", lambda *args: QMessageBox.StandardButton.Yes
+    )
+    if result == "failed":
+        monkeypatch.setattr(
+            app.SceneScan, "arguments", lambda self: ["-invalid-option"]
+        )
+    else:
+        monkeypatch.setattr(app.SceneScan, "ranges", lambda self: [])
+    c.detect_segments(0.3, 1)
+    assert c.segments == []
+    qtbot.waitUntil(lambda: not c.running, timeout=15000)
+    assert not c.detecting
+    assert [(s.start, s.end) for s in c.segments] == ([(0, 6)] if auto_segment else [])
+    assert c.segment_list.count() == len(c.segment_regions) == int(auto_segment)
+    assert c.active_segment == (0 if auto_segment else -1)
+    assert c.export_button.isEnabled() == auto_segment
+    assert c.source_segments[scene_video] is c.segments
+    if auto_segment:
+        assert c.segments[0].rect == (20 / 320, 30 / 240, 160 / 320, 120 / 240)
+    message = c.window.statusBar().currentMessage()
+    if result == "failed":
+        assert message.startswith("FFmpeg exited with code")
+    else:
+        assert message == "Scene detection complete — 0 segments"
+
+
+@pytest.mark.parametrize("auto_segment", [False, True])
+@pytest.mark.parametrize("confirm", [False, True])
+def test_scene_detection_replacement_confirmation(
+    controller, qtbot, scene_video, confirm, auto_segment
+):
+    c = controller
+    c.paths = [scene_video]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready and c.player.duration() == 6000, timeout=15000)
+    c.auto_segment.setChecked(auto_segment)
     c.replace_segments([(0, 1), (1, 6)])
     c.set_rect((20, 30, 160, 120))
     originals = list(c.segments)

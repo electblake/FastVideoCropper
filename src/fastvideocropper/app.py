@@ -2010,6 +2010,15 @@ class Application(QObject):
                     self.refresh_files()
                 if self.quit_done.isChecked():
                     self.countdown("quit", self.quit_delay.value())
+        if (
+            detecting
+            and not detecting_crop
+            and not self.segments
+            and self.auto_segment.isChecked()
+        ):
+            message = self.window.statusBar().currentMessage()
+            self.add_segment()
+            self.window.statusBar().showMessage(message)
         self.update_enabled()
 
     def countdown(self, action, seconds):

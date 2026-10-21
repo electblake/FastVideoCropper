@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Created the default full-timeline segment when scene detection was canceled, failed, or returned no segments and Automatically create first segment was enabled.
+
 ## [0.7.7] - 2026-10-21
 
 ### Added
