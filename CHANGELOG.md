@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-20
+
+### Changed
+
+- Organized source artwork into blue, charcoal, gray, and violet icon and logotype variants, and included the additional muted logo artwork.
+- Removed superseded artwork files from the source tree.
+
 ## [0.7.0] - 2026-10-20
 
 ### Added

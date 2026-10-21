@@ -1,6 +1,6 @@
 [project]
 name = "fastvideocropper"
-version = "0.7.0"
+version = "0.7.1"
 description = "Native Qt video cropping and trimming"
 readme = "README.md"
 license = "MIT"
