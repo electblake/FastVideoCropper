@@ -314,9 +314,6 @@ class Application(QObject):
         )
         self.next = self.button("Next", lambda: self.load(self.index + 1), header)
         files_layout.addLayout(header)
-        self.file_summary = QLabel("Open or drop videos to begin")
-        self.file_summary.setWordWrap(True)
-        files_layout.addWidget(self.file_summary)
         self.locate = self.button(
             "Open Output Folder", self.locate_output, files_layout
         )
@@ -460,7 +457,25 @@ class Application(QObject):
         self.progress = QProgressBar()
         left_layout.addWidget(self.progress)
         self.window.statusBar().showMessage("Ready")
-        process_buttons = QHBoxLayout()
+        process_buttons = QGridLayout()
+        process_buttons.setDefaultPositioning(3, Qt.Orientation.Horizontal)
+        for column in range(3):
+            process_buttons.setColumnStretch(column, 1)
+        self.add_segment_button = self.button(
+            "Add segment", self.add_segment, process_buttons
+        )
+        self.split_segment_button = self.button(
+            "Split segment", self.split_segment, process_buttons
+        )
+        self.merge_segments_button = self.button(
+            "Merge similar segments", self.merge_segments, process_buttons
+        )
+        self.detect_button = self.button(
+            "Detect segments…", self.show_scene_detection, process_buttons
+        )
+        self.clear_segments_button = self.button(
+            "Clear segments", self.clear_segments, process_buttons
+        )
         self.export_button = self.button(
             "Export segments", self.export, process_buttons
         )
@@ -470,6 +485,33 @@ class Application(QObject):
             "Cancel and delete", self.cancel_export, process_buttons
         )
         left_layout.addLayout(process_buttons)
+        self.remember_crop = QCheckBox("Remember crop settings")
+        self.remember_crop.setToolTip(
+            "Restore the last crop, rotation, aspect preset, aspect lock, and padding "
+            "for new videos. Crop position and size scale with the video dimensions."
+        )
+        self.auto_segment = QCheckBox("Automatically create first segment")
+        self.advance = QCheckBox("Load next after completion")
+        self.auto = QCheckBox("Auto-run next")
+        self.quit_done = QCheckBox("Quit when done")
+        process_options = QGridLayout()
+        process_options.setColumnStretch(0, 1)
+        process_options.setColumnStretch(1, 1)
+        for index, (control, key) in enumerate(
+            [
+                (self.remember_crop, "remember_crop"),
+                (self.auto_segment, "auto_segment"),
+                (self.advance, "advance"),
+                (self.auto, "auto"),
+                (self.quit_done, "quit"),
+            ]
+        ):
+            control.setChecked(self.settings.value(key, False, bool))
+            control.toggled.connect(
+                lambda value, k=key: self.settings.setValue(k, value)
+            )
+            process_options.addWidget(control, index // 2, index % 2)
+        left_layout.addLayout(process_options)
         splitter.addWidget(left)
         right = QWidget()
         right_layout = QVBoxLayout(right)
@@ -490,26 +532,6 @@ class Application(QObject):
         self.segment_list.setAccessibleName("Video segments")
         self.segment_list.currentRowChanged.connect(self.select_segment)
         segments_layout.addWidget(self.segment_list, 1)
-        self.segment_summary = QLabel("No segments — add a segment or detect scenes")
-        self.segment_summary.setWordWrap(True)
-        segments_layout.addWidget(self.segment_summary)
-        segment_buttons = QHBoxLayout()
-        self.detect_button = self.button(
-            "Detect segments…", self.show_scene_detection, segment_buttons
-        )
-        self.clear_segments_button = self.button(
-            "Clear segments", self.clear_segments, segment_buttons
-        )
-        segments_layout.addLayout(segment_buttons)
-        self.add_segment_button = self.button(
-            "Add segment", self.add_segment, segments_layout
-        )
-        self.split_segment_button = self.button(
-            "Split segment", self.split_segment, segments_layout
-        )
-        self.merge_segments_button = self.button(
-            "Merge similar segments", self.merge_segments, segments_layout
-        )
         tabs = self.tabs = QTabWidget()
         right_layout.addWidget(tabs, 1)
         self.crop_page = QWidget()
@@ -694,27 +716,6 @@ class Application(QObject):
         self.clear_logs_button = self.button("Clear Logs", self.clear_logs, log_buttons)
         log_layout.addLayout(log_buttons)
         tabs.addTab(log_page, "Process log")
-        self.remember_crop = QCheckBox("Remember crop settings")
-        self.remember_crop.setToolTip(
-            "Restore the last crop, rotation, aspect preset, aspect lock, and padding "
-            "for new videos. Crop position and size scale with the video dimensions."
-        )
-        self.auto_segment = QCheckBox("Automatically create first segment")
-        self.advance = QCheckBox("Load next after completion")
-        self.auto = QCheckBox("Auto-run next")
-        self.quit_done = QCheckBox("Quit when done")
-        for control, key in [
-            (self.remember_crop, "remember_crop"),
-            (self.auto_segment, "auto_segment"),
-            (self.advance, "advance"),
-            (self.auto, "auto"),
-            (self.quit_done, "quit"),
-        ]:
-            control.setChecked(self.settings.value(key, False, bool))
-            control.toggled.connect(
-                lambda value, k=key: self.settings.setValue(k, value)
-            )
-            right_layout.addWidget(control)
         self.count_label = QLabel()
         right_layout.addWidget(self.count_label)
         count_buttons = QHBoxLayout()
@@ -1193,13 +1194,8 @@ class Application(QObject):
     def update_segment_summary(self):
         self.update_merge_enabled()
         if self.segments:
-            total = sum(segment.end - segment.start for segment in self.segments)
-            self.segment_summary.setText(
-                f"{len(self.segments)} segments • {total:.3f} s total"
-            )
             self.export_button.setText(f"Export {len(self.segments)} segments")
         else:
-            self.segment_summary.setText("No segments — add a segment or detect scenes")
             self.export_button.setText("Export segments")
 
     def save_segment(self):
@@ -1315,11 +1311,6 @@ class Application(QObject):
         if self.index >= 0:
             self.file_list.setCurrentRow(self.index)
             self.file_list.scrollToItem(self.file_list.currentItem())
-            self.file_summary.setText(f"{self.index + 1} of {len(self.paths)}")
-        elif self.paths:
-            self.file_summary.setText(f"{len(self.paths)} files — no video selected")
-        else:
-            self.file_summary.setText("Open or drop videos to begin")
         self.file_list.blockSignals(False)
 
     def select_file(self, index):
@@ -1994,7 +1985,8 @@ class Application(QObject):
                     else "Scene detection canceled"
                 )
             else:
-                self.output.unlink()
+                for job in self.export_jobs[: self.export_index + 1]:
+                    job.output.unlink()
                 self.output = None
                 self.window.statusBar().showMessage("Canceled — output deleted")
         elif code != 0 or status != QProcess.ExitStatus.NormalExit:

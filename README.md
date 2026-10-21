@@ -62,6 +62,10 @@ shows or hides it. **View → Reset Layout** restores the default dock arrangeme
 and splitter sizes without changing the main window's size or position.
 Panel position, size, floating state, and visibility are restored on startup.
 
+Segment editing and export buttons share a three-column grid below the preview.
+Crop memory, automatic first segment, and completion checkboxes sit beneath the
+buttons in two columns. The Files and Segments panels contain no summary messages.
+
 Select a segment in the Segments list or click its timeline region to edit its
 crop, rotation, aspect preset, and aspect lock independently.
 **Segment → Merge similar segments** combines consecutive touching segments with
@@ -74,8 +78,10 @@ If FFmpeg reports that the source container cannot store HEVC (including 3GP and
 WebM), export retries that segment as MKV and uses MKV for the remaining segments.
 The Process log reports the fallback, removed failed output, and new filename.
 The video encoder and copied audio stay unchanged; other failures are not retried.
-Stop or cancel ends the queue; earlier completed files remain. Cancel deletes the
-current output. **Segment → Clear segments** removes all segments and disables
+Stop or cancel ends the queue without advancing to another video. Stop keeps
+completed segments and the current output. Cancel deletes completed segments and
+the current partial output from that export; outputs for segments that have not
+started are untouched. **Segment → Clear segments** removes all segments and disables
 export until detection creates new segments. Segment settings remain
 available when navigating between videos during the session.
 Export saves the selected crop before starting, selects and scrolls to each segment

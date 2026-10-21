@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Moved Add, Split, Merge, Detect, and Clear segment buttons into one three-column grid with Export, Pause, Stop, and Cancel.
+- Moved Remember crop settings, Automatically create first segment, Load next after completion, Auto-run next, and Quit when done into two columns beneath the button grid.
+
+### Removed
+
+- Removed file counters and summary messages beneath the Files and Segments lists, leaving empty lists blank.
+
+### Fixed
+
+- Removed all completed segment outputs and the current partial output from the current export when Cancel and delete was selected; Stop and keep continued preserving them.
+
 ## [0.7.9] - 2026-10-21
 
 ### Added

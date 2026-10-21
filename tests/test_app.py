@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
+    QGridLayout,
     QMessageBox,
     QPushButton,
     QSpinBox,
@@ -33,6 +34,65 @@ def controller(qtbot, tmp_path, monkeypatch):
     controller.window.show()
     yield controller
     controller.window.close()
+
+
+@pytest.mark.parametrize("placement", ["docked", "floating", "hidden"])
+def test_segment_and_export_button_grid(controller, qtbot, source, placement):
+    c = controller
+    parent = c.export_button.parentWidget()
+    layout = parent.layout()
+    grid = next(
+        layout.itemAt(i).layout()
+        for i in range(layout.count())
+        if isinstance(layout.itemAt(i).layout(), QGridLayout)
+        and layout.itemAt(i).layout().indexOf(c.export_button) >= 0
+    )
+    buttons = [
+        c.add_segment_button,
+        c.split_segment_button,
+        c.merge_segments_button,
+        c.detect_button,
+        c.clear_segments_button,
+        c.export_button,
+        c.pause,
+        c.stop,
+        c.cancel,
+    ]
+    assert grid.count() == 9
+    for i, button in enumerate(buttons):
+        assert grid.itemAtPosition(i // 3, i % 3).widget() is button
+        assert button.parentWidget() is parent
+        assert not c.segments_dock.isAncestorOf(button)
+    if placement == "floating":
+        c.segments_dock.setFloating(True)
+    elif placement == "hidden":
+        c.segments_dock.hide()
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.add_segment_button.click()
+    c.seek_segment(3000)
+    c.split_segment_button.click()
+    c.seek_segment(4000)
+    assert len(c.segments) == 2
+    for button in buttons:
+        assert button.isVisible()
+        assert button.width() >= button.minimumSizeHint().width()
+    for state in ("loading", "running", "resolving_encoder"):
+        setattr(c, state, True)
+        c.update_enabled()
+        assert all(not button.isEnabled() for button in buttons[:6])
+        assert c.cancel.isEnabled() == (state == "running")
+        assert c.pause.isEnabled() == (state == "running")
+        assert c.stop.isEnabled() == (state == "running")
+        setattr(c, state, False)
+    c.update_enabled()
+    assert all(button.isEnabled() for button in buttons[:6])
+    c.merge_segments_button.click()
+    assert len(c.segments) == 1
+    c.clear_segments_button.click()
+    assert not c.segments
+    assert not c.export_button.isEnabled()
 
 
 @pytest.mark.parametrize("trigger", ["button", "menu"])
@@ -77,6 +137,57 @@ def test_merge_similar_segments(controller, qtbot, source, trigger):
     c.merge_segments_button.click()
     assert [(s.start, s.end) for s in c.segments] == [(0, 3), (3, 8)]
     assert c.active_segment == 1
+
+
+@pytest.mark.parametrize("size", [(1200, 800), (900, 700)])
+def test_process_options_layout_keyboard_and_persistence(
+    controller, qtbot, tmp_path, size
+):
+    c = controller
+    c.window.resize(*size)
+    c.window.activateWindow()
+    qtbot.waitUntil(c.window.isActiveWindow)
+    parent = c.export_button.parentWidget()
+    layout = parent.layout()
+    buttons = layout.itemAt(layout.count() - 2).layout()
+    options = layout.itemAt(layout.count() - 1).layout()
+    assert isinstance(buttons, QGridLayout)
+    assert isinstance(options, QGridLayout)
+    assert buttons.indexOf(c.export_button) >= 0
+    assert options.count() == 5
+    preferences = [
+        ("remember_crop", "remember_crop"),
+        ("auto_segment", "auto_segment"),
+        ("advance", "advance"),
+        ("auto", "auto"),
+        ("quit_done", "quit"),
+    ]
+    c.remember_crop.setFocus()
+    for index, (name, key) in enumerate(preferences):
+        control = getattr(c, name)
+        assert options.itemAtPosition(index // 2, index % 2).widget() is control
+        assert control.parentWidget() is parent
+        assert control.isVisible()
+        assert control.width() >= control.minimumSizeHint().width()
+        assert parent.rect().contains(control.geometry())
+        assert control.y() > c.cancel.geometry().bottom()
+        assert control.hasFocus()
+        qtbot.keyClick(control, Qt.Key.Key_Space)
+        assert control.isChecked()
+        assert c.settings.value(key, False, bool)
+        qtbot.keyClick(control, Qt.Key.Key_Tab)
+    c.window.grab().save(str(tmp_path / "process-controls.png"))
+    c.window.close()
+    restored = app.Application()
+    qtbot.addWidget(restored.window)
+    restored.window.show()
+    for name, _ in preferences:
+        assert getattr(restored, name).isChecked()
+        assert (
+            getattr(restored, name).parentWidget()
+            is restored.export_button.parentWidget()
+        )
+    restored.window.close()
 
 
 def test_merge_ignores_editing_settings_and_exports(controller, qtbot, source):
@@ -136,12 +247,8 @@ def test_add_full_timeline_segment(controller, qtbot, source, trigger):
         if action.text() == "&Segment"
     )
     assert c.add_segment_action in segment_menu.actions()
-    process_buttons = c.export_button.parentWidget().layout()
-    process_buttons = process_buttons.itemAt(process_buttons.count() - 1).layout()
-    assert process_buttons.itemAt(0).widget() is c.export_button
-    assert process_buttons.itemAt(1).widget() is c.pause
     assert c.window.centralWidget().isAncestorOf(c.export_button)
-    assert c.segments_dock.isAncestorOf(c.add_segment_button)
+    assert c.add_segment_button.parentWidget() is c.export_button.parentWidget()
     c.paths = [source]
     c.load(0)
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
@@ -283,6 +390,8 @@ def test_remember_crop_between_files_and_sessions(
     other = tmp_path / "next.mp4"
     other.write_bytes(source.read_bytes())
     layout = c.advance.parentWidget().layout()
+    layout = layout.itemAt(layout.count() - 1).layout()
+    assert isinstance(layout, QGridLayout)
     assert layout.indexOf(c.remember_crop) + 1 == layout.indexOf(c.auto_segment)
     assert layout.indexOf(c.auto_segment) + 1 == layout.indexOf(c.advance)
     assert not c.remember_crop.isChecked()
@@ -546,7 +655,7 @@ def test_detect_select_clear_segments(
         ).click()
 
     QTimer.singleShot(100, accept_detection)
-    c.detect_action.trigger()
+    c.detect_button.click()
     assert not c.detect_button.isEnabled()
     assert not c.open_action.isEnabled()
     qtbot.waitUntil(lambda: not c.detecting, timeout=15000)
@@ -1089,7 +1198,6 @@ def test_unload_keeps_files_and_releases_source(
     assert c.file_list.count() == 2
     assert c.index == c.file_list.currentRow() == -1
     assert not c.file_list.selectedItems()
-    assert c.file_summary.text() == "2 files — no video selected"
     assert not c.ready and not c.loading
     assert c.player.source().isEmpty()
     assert not c.video.videoSink().videoFrame().isValid()
@@ -1566,6 +1674,59 @@ def test_position_edits_preserve_fractional_crop(controller, qtbot, source):
     width = c.rect()[2]
     c.fields[3].setValue(50)
     assert c.rect()[2] == width
+
+
+@pytest.mark.parametrize("finish", ["stop", "cancel"])
+@pytest.mark.parametrize("suffix", [".mp4", ".webm"])
+def test_interrupt_after_completed_segment(
+    controller, qtbot, source, tmp_path, monkeypatch, finish, suffix
+):
+    video = tmp_path / f"interrupt{suffix}"
+    video.write_bytes(source.read_bytes())
+    c = controller
+    c.paths = [video, source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 0.5), (0.5, 6), (6, 8)])
+    c.advance.setChecked(True)
+    c.auto.setChecked(True)
+    arguments = app.Export.arguments
+    monkeypatch.setattr(
+        app.Export,
+        "arguments",
+        lambda self: (["-re"] if self.segment_number == 2 else []) + arguments(self),
+    )
+    output_suffix = ".mkv" if suffix == ".webm" else suffix
+    unstarted = video.with_stem(f"{video.stem}_SEGMENT_003_CROPPED").with_suffix(
+        output_suffix
+    )
+    unstarted.write_bytes(b"output from a previous export")
+    unrelated = tmp_path / "unrelated.mp4"
+    unrelated.write_bytes(b"unrelated output")
+    c.export_with_encoder("libx265")
+    qtbot.waitUntil(
+        lambda: c.export_index == 1 and c.processing_position > 0.5,
+        timeout=15000,
+    )
+    completed, partial = [job.output for job in c.export_jobs[:2]]
+    assert completed.exists() and partial.exists()
+    c.pause_export()
+    if finish == "cancel":
+        c.cancel.click()
+    else:
+        c.stop.click()
+    qtbot.waitUntil(lambda: not c.running, timeout=15000)
+    assert completed.exists() == (finish == "stop")
+    assert partial.exists() == (finish == "stop")
+    assert unstarted.read_bytes() == b"output from a previous export"
+    assert unrelated.read_bytes() == b"unrelated output"
+    assert video.read_bytes() == source.read_bytes()
+    assert c.index == 0 and c.export_index == 1
+    assert c.ready and not c.loading
+    assert not c.count_timer.isActive()
+    assert not c.auto_export_pending
+    assert video not in c.done
+    assert c.output == (partial if finish == "stop" else None)
 
 
 @pytest.mark.parametrize("finish", ["stop", "cancel"])
@@ -2412,14 +2573,8 @@ def test_segments_dock_layout_persistence_and_reset(controller, qtbot, placement
     assert view_menu.actions()[2].isSeparator()
     assert toggle.isCheckable() and toggle.isChecked()
     assert c.window.dockWidgetArea(dock) == Qt.DockWidgetArea.RightDockWidgetArea
-    for widget in (
-        c.segment_list,
-        c.segment_summary,
-        c.detect_button,
-        c.clear_segments_button,
-        c.split_segment_button,
-    ):
-        assert dock.isAncestorOf(widget)
+    assert dock.isAncestorOf(c.segment_list)
+    assert dock.widget().layout().count() == 1
     assert not dock.isAncestorOf(c.tabs)
     dock.close()
     assert not toggle.isChecked()
@@ -2513,7 +2668,6 @@ def test_files_selection_and_append(controller, qtbot, source, tmp_path, monkeyp
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
     assert c.file_list.count() == 2
     assert c.file_list.currentRow() == c.index == 0
-    assert c.file_summary.text() == "1 of 2"
     assert c.file_list.item(1).data(Qt.ItemDataRole.UserRole) == other
     assert c.file_list.item(1).toolTip() == str(other)
     c.add_segment_button.click()
@@ -2523,7 +2677,6 @@ def test_files_selection_and_append(controller, qtbot, source, tmp_path, monkeyp
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
     assert c.index == c.file_list.currentRow() == 1
     assert c.player.source().toLocalFile() == str(other).replace("\\", "/")
-    assert c.file_summary.text() == "2 of 2"
     c.previous.click()
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
     assert c.file_list.currentRow() == 0
