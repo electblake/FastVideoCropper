@@ -51,6 +51,10 @@ Select a segment in the Segments list or click its timeline region to edit its
 crop, rotation, aspect preset, and aspect lock independently.
 **Export segments** writes separate `name_SEGMENT_001_CROPPED.ext`,
 `name_SEGMENT_002_CROPPED.ext`, etc. beside the source, overwriting matching outputs.
+If FFmpeg reports that the source container cannot store HEVC (including 3GP and
+WebM), export retries that segment as MKV and uses MKV for the remaining segments.
+The Process log reports the fallback, removed failed output, and new filename.
+The video encoder and copied audio stay unchanged; other failures are not retried.
 Stop or cancel ends the queue; earlier completed files remain. Cancel deletes the
 current output. **Segment → Clear segments** removes all segments and disables
 export until detection creates new segments. Segment settings remain

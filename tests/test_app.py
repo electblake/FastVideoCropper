@@ -904,6 +904,161 @@ def test_close_releases_video(controller, qtbot, source, tmp_path, playing):
     video.rename(tmp_path / "released.mp4")
 
 
+@pytest.mark.parametrize(
+    "suffix,video_encoder,audio_encoder",
+    [(".3gp", "libx264", "aac"), (".webm", "libvpx-vp9", "libopus")],
+)
+def test_container_fallback_exports_remaining_segments(
+    controller, qtbot, source, tmp_path, suffix, video_encoder, audio_encoder
+):
+    video = tmp_path / f"container-test{suffix}"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-i",
+            str(source),
+            "-t",
+            "1",
+            "-c:v",
+            video_encoder,
+            "-c:a",
+            audio_encoder,
+            str(video),
+        ],
+        check=True,
+        capture_output=True,
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+    original = video.read_bytes()
+    c = controller
+    c.paths = [video]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 0.5), (0.5, 1)])
+    c.set_rect((20, 30, 160, 120))
+    c.save_segment()
+    c.advance.setChecked(False)
+    c.export_with_encoder("libx265")
+    qtbot.waitUntil(lambda: not c.running, timeout=30000)
+    assert video in c.done
+    assert video.read_bytes() == original
+    assert c.log.toPlainText().count("Container fallback:") == 1
+    assert "New output:" in c.log.toPlainText()
+    assert c.window.statusBar().currentMessage() == "Complete — 2 segments saved"
+    for index, job in enumerate(c.export_jobs):
+        assert job.output.suffix == ".mkv"
+        assert not job.output.with_suffix(suffix).exists()
+        metadata = json.loads(
+            subprocess.check_output(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-show_streams",
+                    "-of",
+                    "json",
+                    str(job.output),
+                ],
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+        )
+        video_stream, audio_stream = metadata["streams"]
+        assert video_stream["codec_name"] == "hevc"
+        assert audio_stream["codec_name"] == ("aac" if suffix == ".3gp" else "opus")
+        assert (video_stream["width"], video_stream["height"]) == (
+            (160, 120) if index == 0 else (320, 240)
+        )
+
+
+def test_container_fallback_failure_is_not_retried(
+    controller, qtbot, source, monkeypatch
+):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 1)])
+    start = MagicMock()
+    monkeypatch.setattr(c.process, "start", start)
+    c.export_with_encoder("libx265")
+    c.output.touch()
+    c.container_rejected = True
+    c.finished(1, app.QProcess.ExitStatus.NormalExit)
+    assert start.call_count == 2
+    assert c.job.container == "mkv"
+    assert c.running
+    assert not c.container_rejected
+    assert c.export_log == ""
+    c.container_rejected = True
+    c.finished(1, app.QProcess.ExitStatus.NormalExit)
+    assert start.call_count == 2
+    assert not c.running
+    assert source not in c.done
+    assert c.ready
+    assert (
+        c.window.statusBar().currentMessage()
+        == "FFmpeg exited with code 1 — see Process log"
+    )
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["Could not find tag for codec hevc", "Only VP8 or VP9 or AV1 video"],
+)
+def test_container_diagnostic_handles_chunks_without_retaining_log(
+    controller, monkeypatch, message
+):
+    c = controller
+    c.running = True
+    chunks = [
+        b"metadata\n" * 1000,
+        message[:15].encode(),
+        message[15:].encode(),
+        b"diagnostics\n" * 1000,
+    ]
+    read = MagicMock(side_effect=chunks)
+    monkeypatch.setattr(c.process, "readAllStandardError", read)
+    for _ in chunks:
+        c.read_log()
+        assert len(c.export_log) <= 128
+    assert c.container_rejected
+    c.running = False
+
+
+@pytest.mark.parametrize("outcome", ["cancel", "stop", "crash", "encoder"])
+def test_container_fallback_does_not_retry_other_failures(
+    controller, qtbot, source, monkeypatch, outcome
+):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 1)])
+    start = MagicMock()
+    monkeypatch.setattr(c.process, "start", start)
+    c.export_with_encoder("libx265")
+    c.output.touch()
+    c.container_rejected = outcome != "encoder"
+    if outcome in ("cancel", "stop"):
+        c.outcome = outcome
+    status = (
+        app.QProcess.ExitStatus.CrashExit
+        if outcome == "crash"
+        else app.QProcess.ExitStatus.NormalExit
+    )
+    c.finished(1, status)
+    assert start.call_count == 1
+    assert not c.running
+    assert c.job.container is None
+    assert source not in c.done
+    assert c.ready
+    assert "Container fallback:" not in c.log.toPlainText()
+    assert c.output is None if outcome == "cancel" else c.output.exists()
+
+
 @pytest.mark.parametrize("playing", [False, True])
 def test_switch_releases_previous_video(controller, qtbot, source, tmp_path, playing):
     import shutil

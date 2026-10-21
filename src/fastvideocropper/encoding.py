@@ -16,12 +16,16 @@ class Export:
     device: int = 0
     segment_number: int = 1
     exact_crop: bool = False
+    container: str | None = None
 
     @property
     def output(self):
-        return self.source.with_stem(
+        output = self.source.with_stem(
             f"{self.source.stem}_SEGMENT_{self.segment_number:03d}_CROPPED"
         )
+        if self.container is not None:
+            output = output.with_suffix(f".{self.container}")
+        return output
 
     def arguments(self):
         x, y, w, h = self.rect

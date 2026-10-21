@@ -119,6 +119,8 @@ class Application(QObject):
         self.output = None
         self.progress_buffer = ""
         self.progress_values = {}
+        self.export_log = ""
+        self.container_rejected = False
         self.seek_pending = False
         self.segments = []
         self.source_segments = {}
@@ -1640,6 +1642,8 @@ class Application(QObject):
 
     def start_export_job(self):
         self.job = self.export_jobs[self.export_index]
+        self.export_log = ""
+        self.container_rejected = False
         self.player.pause()
         self.segment_list.blockSignals(True)
         self.segment_list.setCurrentRow(self.export_index)
@@ -1689,6 +1693,13 @@ class Application(QObject):
     def read_log(self):
         text = bytes(self.process.readAllStandardError()).decode("utf-8")
         self.log.appendPlainText(text)
+        if self.running and not self.installing and not self.detecting:
+            self.export_log += text
+            self.container_rejected |= (
+                "Could not find tag for codec hevc" in self.export_log
+                or "Only VP8 or VP9 or AV1 video" in self.export_log
+            )
+            self.export_log = self.export_log[-128:]
         if self.detecting_crop:
             self.crop_scan.read_log(text)
         elif self.detecting:
@@ -1831,6 +1842,29 @@ class Application(QObject):
                 self.output = None
                 self.window.statusBar().showMessage("Canceled — output deleted")
         elif code != 0 or status != QProcess.ExitStatus.NormalExit:
+            if (
+                code != 0
+                and status == QProcess.ExitStatus.NormalExit
+                and not self.outcome
+                and not detecting
+                and self.job.container != "mkv"
+                and self.container_rejected
+            ):
+                failed_output = self.output
+                failed_output.unlink()
+                for index in range(self.export_index, len(self.export_jobs)):
+                    self.export_jobs[index] = replace(
+                        self.export_jobs[index], container="mkv"
+                    )
+                self.log.appendPlainText(
+                    f"Container fallback: {failed_output.suffix} rejected HEVC. "
+                    "Retrying this segment and exporting remaining segments as MKV "
+                    "with the same video encoder and copied audio. "
+                    f"Removed failed output: {failed_output}\n"
+                    f"New output: {self.export_jobs[self.export_index].output}"
+                )
+                self.start_export_job()
+                return
             self.window.statusBar().showMessage(
                 f"FFmpeg exited with code {code} — see Process log"
             )
