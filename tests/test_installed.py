@@ -5,14 +5,14 @@ from unittest.mock import Mock
 from fastvideocropper import installed
 
 
-def test_installed_launcher_uses_private_tools_and_forwards_folder(
+def test_installed_launcher_uses_private_tools_and_forwards_paths(
     monkeypatch, tmp_path
 ):
     root = tmp_path / "Installed App"
     prefix = root / "application/.venv"
     folder = str(tmp_path / "Video Folder")
     monkeypatch.setattr(sys, "prefix", str(prefix))
-    monkeypatch.setattr(sys, "argv", ["pythonw", folder])
+    monkeypatch.setattr(sys, "argv", ["pythonw", folder, "clip.mp4"])
     qt = Mock()
     qt.exec.return_value = 0
     monkeypatch.setattr(installed, "QApplication", lambda args: qt)
@@ -27,7 +27,7 @@ def test_installed_launcher_uses_private_tools_and_forwards_folder(
     controller.assert_called_once_with(
         str(tools / "ffmpeg.exe"),
         str(tools / "ffprobe.exe"),
-        folder=folder,
+        paths=[folder, "clip.mp4"],
         launcher_module="fastvideocropper.installed",
     )
 

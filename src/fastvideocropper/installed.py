@@ -24,7 +24,7 @@ def main():
     controller = Application(
         str(tools / "ffmpeg.exe"),
         str(tools / "ffprobe.exe"),
-        folder=sys.argv[1] if len(sys.argv) > 1 else None,
+        paths=sys.argv[1:],
         launcher_module=MODULE,
     )
     controller.window.show()

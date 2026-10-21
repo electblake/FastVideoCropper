@@ -25,6 +25,9 @@ from fastvideocropper import app
 @pytest.fixture
 def controller(qtbot, tmp_path, monkeypatch):
     monkeypatch.setattr(app, "user_config_path", lambda *args, **kwargs: tmp_path)
+    monkeypatch.setattr(
+        app.VideoFileDialog, "exec", lambda self: QDialog.DialogCode.Accepted
+    )
     controller = app.Application()
     qtbot.addWidget(controller.window)
     controller.window.show()
@@ -214,7 +217,7 @@ def test_automatically_create_first_segment(
     c.padding_fields[1].setValue(-3)
     if trigger == "open":
         monkeypatch.setattr(
-            app.QFileDialog, "getOpenFileNames", lambda *args: ([str(other)], "")
+            app.VideoFileDialog, "selectedFiles", lambda self: [str(other)]
         )
         c.open_action.trigger()
     elif trigger == "next":
@@ -1151,9 +1154,9 @@ def test_preview_after_repeated_completed_runs(
             c.file_list.setCurrentRow(len(c.paths) - 1)
         elif reopen == "open":
             monkeypatch.setattr(
-                app.QFileDialog,
-                "getOpenFileNames",
-                lambda *args, path=scene_video: ([str(path)], ""),
+                app.VideoFileDialog,
+                "selectedFiles",
+                lambda self, path=scene_video: [str(path)],
             )
             c.open_button.click()
         else:
@@ -1869,7 +1872,8 @@ def test_explorer_folder_startup(qtbot, tmp_path, monkeypatch):
     settings.sync()
     monkeypatch.setattr(app, "user_config_path", lambda *args, **kwargs: tmp_path)
     folder = str(tmp_path / "Selected folder with spaces")
-    c = app.Application(folder=folder)
+    Path(folder).mkdir()
+    c = app.Application(paths=[folder])
     qtbot.addWidget(c.window)
     assert settings.value("folder_path") == folder
     assert c.paths == []
@@ -1880,7 +1884,7 @@ def test_explorer_folder_startup(qtbot, tmp_path, monkeypatch):
 
 def test_explorer_startup_argument(monkeypatch, tmp_path):
     folder = str(tmp_path / "Selected folder with spaces")
-    monkeypatch.setattr(sys, "argv", ["fastvideocropper", folder])
+    monkeypatch.setattr(sys, "argv", ["fastvideocropper", folder, "clip.mp4"])
     application = MagicMock()
     application.return_value.exec.return_value = 0
     controller = MagicMock()
@@ -1888,7 +1892,7 @@ def test_explorer_startup_argument(monkeypatch, tmp_path):
     monkeypatch.setattr(app, "QApplication", application)
     monkeypatch.setattr(app, "Application", controller)
     assert app.main() == 0
-    controller.assert_called_once_with(folder=folder)
+    controller.assert_called_once_with(paths=[folder, "clip.mp4"])
 
 
 def test_preferences_restored_from_config_file(controller, qtbot, source, tmp_path):
@@ -2493,18 +2497,16 @@ def test_hidden_segments_stay_linked_to_timeline(controller, qtbot, source):
     assert not c.export_button.isEnabled()
 
 
-def test_files_selection_and_replacement(
-    controller, qtbot, source, tmp_path, monkeypatch
-):
+def test_files_selection_and_append(controller, qtbot, source, tmp_path, monkeypatch):
     c = controller
     other = tmp_path / source.name
     other.write_bytes(source.read_bytes())
     assert c.file_list.count() == 0
     assert not c.file_list.isEnabled()
     monkeypatch.setattr(
-        app.QFileDialog,
-        "getOpenFileNames",
-        lambda *args: ([str(source), str(other)], ""),
+        app.VideoFileDialog,
+        "selectedFiles",
+        lambda self: [str(source), str(other)],
     )
     c.open_button.click()
     assert not c.file_list.isEnabled()
@@ -2542,11 +2544,11 @@ def test_files_selection_and_replacement(
     c.update_busy(False)
     assert c.file_list.isEnabled()
     monkeypatch.setattr(
-        app.QFileDialog, "getOpenFileNames", lambda *args: ([str(source)], "")
+        app.VideoFileDialog, "selectedFiles", lambda self: [str(source)]
     )
     c.open_action.trigger()
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
-    assert c.file_list.count() == 1
+    assert c.file_list.count() == 2
     assert c.file_list.currentRow() == 0
     assert c.rect() == (20, 30, 160, 120)
 

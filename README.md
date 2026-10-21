@@ -15,7 +15,12 @@ uv sync
 uv run fastvideocropper
 ```
 
-Open multiple videos with Ctrl+O or drop files on the window. Detect segments,
+Open videos or folders with Ctrl+O, or drop them onto the Files panel or window.
+Folders add their immediate `.mp4`, `.mkv`, `.mov`, `.avi`, and `.webm` files
+(case-insensitive); subfolders are not scanned. Inputs append to the list without
+duplicating existing entries. Launch arguments accept mixed files and folders,
+for example `uv run fastvideocropper "C:\Videos" "C:\Clips\clip.mp4"`.
+Detect segments,
 select one, then drag its crop or its eight handles; use the numeric fields for
 keyboard editing. Export requires segments. The source is never overwritten.
 
@@ -89,8 +94,8 @@ Use Lock aspect ratio to lock or unlock resizing independently of preset selecti
 Under Help → Install in File Explorer, click Install in File Explorer to add
 “Open in FastVideoCropper” to folder, folder-background, and drive context menus
 for the current user. No administrator access is needed; installing again
-overwrites the same entries. Explorer fills the Folder field without loading
-videos or starting an export. Open videos uses this folder as its starting location.
+overwrites the same entries. Explorer adds the selected folder's videos and opens
+the first video without starting an export. Open videos starts in that folder.
 Source installations use the current interpreter with `-I -m fastvideocropper`,
 so the package must remain installed in that interpreter. Setup installations
 use their private Python interpreter and the installed application icon.
@@ -109,7 +114,7 @@ See [component decisions](docs/components.md) and [coverage](docs/coverage.md).
 
 ## Windows installer
 
-Release 0.7.8 provides a small per-user Windows x64 online Setup executable.
+Release 0.7.9 provides a small per-user Windows x64 online Setup executable.
 It downloads uv, Python, the locked Qt/Python dependencies, FFmpeg and FFprobe.
 Installation requires Internet access; the installed app runs offline.
 See [release build instructions](packaging/README.md)

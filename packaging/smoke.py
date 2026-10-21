@@ -40,10 +40,9 @@ subprocess.run(
 )
 application.user_config_path = lambda *args, **kwargs: Path(workspace.name)
 app = QApplication([])
-controller = application.Application(ffmpeg, ffprobe)
+controller = application.Application(ffmpeg, ffprobe, paths=[source.parent, source])
 controller.window.show()
-controller.paths = [source]
-controller.load(0)
+assert controller.paths == [source]
 phase = "load"
 timer = QTimer()
 

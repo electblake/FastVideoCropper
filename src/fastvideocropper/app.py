@@ -87,6 +87,12 @@ RATIOS = {
 }
 
 
+class VideoFileDialog(QFileDialog):
+    def accept(self):
+        # Accept highlighted folders as inputs; double-click still navigates.
+        QDialog.accept(self)
+
+
 class Application(QObject):
     """Application controller; all visual components are stock or third-party."""
 
@@ -94,7 +100,7 @@ class Application(QObject):
         self,
         ffmpeg="ffmpeg",
         ffprobe="ffprobe",
-        folder=None,
+        paths=(),
         launcher_module=integrations.APP_MODULE,
     ):
         super().__init__()
@@ -105,8 +111,11 @@ class Application(QObject):
             str(user_config_path(APP_NAME, appauthor=False) / "settings.ini"),
             QSettings.Format.IniFormat,
         )
-        if folder is not None:
-            self.settings.setValue("folder_path", folder)
+        if paths:
+            path = Path(paths[0]).resolve()
+            self.settings.setValue(
+                "folder_path", str(path if path.is_dir() else path.parent)
+            )
         self.paths = []
         self.index = -1
         self.done = set()
@@ -196,7 +205,10 @@ class Application(QObject):
         self.window.installEventFilter(self)
         self.viewport = self.graphics.viewport()
         self.viewport.installEventFilter(self)
+        self.files_dock.widget().installEventFilter(self)
+        self.file_list.viewport().installEventFilter(self)
         self.update_enabled()
+        self.add_paths(paths)
 
     def button(self, text, slot, layout):
         button = QPushButton(text)
@@ -286,6 +298,8 @@ class Application(QObject):
         view_menu.addAction(self.files_dock.toggleViewAction())
         self.open_button = self.button("Open videos…", self.open_files, files_layout)
         self.file_list = QListWidget()
+        files.setAcceptDrops(True)
+        self.file_list.setAcceptDrops(True)
         self.file_list.setAccessibleName("Input videos")
         self.file_list.setTextElideMode(Qt.TextElideMode.ElideMiddle)
         self.file_list.setHorizontalScrollBarPolicy(
@@ -1257,15 +1271,38 @@ class Application(QObject):
                 break
 
     def open_files(self):
-        paths, _ = QFileDialog.getOpenFileNames(
+        dialog = VideoFileDialog(
             self.window,
             "Open videos",
             self.settings.value("folder_path", ""),
             "Videos (*.mp4 *.mkv *.mov *.avi *.webm);;All files (*)",
         )
-        if paths:
-            self.paths = [Path(p) for p in paths]
-            self.load(0)
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog)
+        dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.settings.setValue("folder_path", dialog.directory().absolutePath())
+            self.add_paths(dialog.selectedFiles())
+        dialog.deleteLater()
+
+    def add_paths(self, paths):
+        videos = []
+        for value in paths:
+            path = Path(value).resolve()
+            if path.is_dir():
+                videos.extend(
+                    child.resolve()
+                    for child in sorted(path.iterdir())
+                    if child.is_file()
+                    and child.suffix.lower()
+                    in (".mp4", ".mkv", ".mov", ".avi", ".webm")
+                )
+            else:
+                videos.append(path)
+        for video in videos:
+            if video not in self.paths:
+                self.paths.append(video)
+        if videos:
+            self.load(self.paths.index(videos[0]))
 
     def refresh_files(self):
         self.file_list.blockSignals(True)
@@ -2177,9 +2214,13 @@ class Application(QObject):
             Path(filename).write_text(self.log.toPlainText(), encoding="utf-8")
 
     def eventFilter(self, watched, event):
-        if watched is self.window:
+        if watched in (
+            self.window,
+            self.files_dock.widget(),
+            self.file_list.viewport(),
+        ):
             if (
-                event.type() == QEvent.Type.DragEnter
+                event.type() in (QEvent.Type.DragEnter, QEvent.Type.DragMove)
                 and not self.running
                 and not self.detecting
                 and not self.loading
@@ -2195,13 +2236,10 @@ class Application(QObject):
                 and not self.loading
                 and not self.resolving_encoder
             ):
-                self.paths = [
-                    Path(url.toLocalFile()) for url in event.mimeData().urls()
-                ]
-                self.load(0)
+                self.add_paths([url.toLocalFile() for url in event.mimeData().urls()])
                 event.acceptProposedAction()
                 return True
-            if event.type() == QEvent.Type.Close:
+            if watched is self.window and event.type() == QEvent.Type.Close:
                 if self.update_dialog.busy:
                     event.ignore()
                     return True
@@ -2225,6 +2263,8 @@ class Application(QObject):
                     self.gpu_probe.waitForFinished()
                 self.window.removeEventFilter(self)
                 self.viewport.removeEventFilter(self)
+                self.files_dock.widget().removeEventFilter(self)
+                self.file_list.viewport().removeEventFilter(self)
                 self.resize_timer.stop()
                 self.follow_timer.stop()
                 self.count_timer.stop()
@@ -2264,7 +2304,7 @@ def main():
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(APP_VERSION)
     app.setOrganizationName("FastVideoCropper")
-    controller = Application(folder=sys.argv[1] if len(sys.argv) > 1 else None)
+    controller = Application(paths=sys.argv[1:])
     controller.window.show()
     result = app.exec()
     if controller.window.pending_installer is not None:

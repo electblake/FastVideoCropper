@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.9] - 2026-10-21
+
+### Added
+
+- Accepted folders and mixed video/folder selections through Open videos, drag-and-drop onto the Files panel, and launch arguments, without adding controls.
+- Appended immediate MP4, MKV, MOV, AVI, and WebM files from folders while preserving the existing list and saved crops.
+- Added coverage for folder selection, populated lists, empty folders, canceled dialogs, startup arguments, and importing after completed runs.
+
+### Fixed
+
+- Loaded folder videos when launched from File Explorer instead of only remembering the folder path.
+- Resolved input paths before deduplication so alternate spellings of the same path retained one file and its saved segments.
+
 ## [0.7.8] - 2026-10-21
 
 ### Added

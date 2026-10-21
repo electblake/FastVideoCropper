@@ -6,6 +6,8 @@ keyboard. No custom fonts, themes, or widget painting.
 ## Implemented
 
 - Multiple-file picker and drag/drop, queue position, previous/next, done state.
+- Mixed file/folder input through the existing picker, Files panel drops, and
+  launch arguments; immediate folder videos append without duplicate paths.
 - Explicit Select none and Clear files controls; unloading preserves the list and
   cached segments, while clearing removes them. Switching releases the old source.
 - Qt Multimedia source playback, pause, mute, millisecond position display,
