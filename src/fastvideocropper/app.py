@@ -225,6 +225,9 @@ class Application(QObject):
         self.clear_segments_action = segment_menu.addAction(
             "&Clear segments", self.clear_segments
         )
+        self.merge_segments_action = segment_menu.addAction(
+            "&Merge similar segments", self.merge_segments
+        )
         crop_menu = self.window.menuBar().addMenu("&Crop")
         self.detect_crop_action = crop_menu.addAction(
             "&Detect crop borders…", self.show_crop_detection
@@ -480,6 +483,9 @@ class Application(QObject):
         )
         self.split_segment_button = self.button(
             "Split segment", self.split_segment, segments_layout
+        )
+        self.merge_segments_button = self.button(
+            "Merge similar segments", self.merge_segments, segments_layout
         )
         self.export_button = self.button(
             "Export segments", self.export, segments_layout
@@ -1058,6 +1064,44 @@ class Application(QObject):
         self.segment_list.scrollToItem(self.segment_list.currentItem())
         self.update_enabled()
 
+    def merge_segments(self):
+        self.count_cancelled()
+        self.player.pause()
+        self.save_segment()
+        original_count = len(self.segments)
+        merged = []
+        selected = -1
+        for index, segment in enumerate(self.segments):
+            if merged and merged[-1].can_merge(segment):
+                merged[-1].end = segment.end
+            else:
+                merged.append(segment)
+            if index == self.active_segment:
+                selected = len(merged) - 1
+        self.segments[:] = merged
+        self.active_segment = -1
+        self.refresh_segments()
+        self.segment_list.blockSignals(True)
+        self.segment_list.setCurrentRow(selected)
+        self.segment_list.blockSignals(False)
+        self.select_segment(selected, seek_start=False)
+        self.update_enabled()
+        self.window.statusBar().showMessage(
+            f"Merged {original_count} segments into {len(self.segments)}"
+        )
+
+    def update_merge_enabled(self):
+        enabled = (
+            self.ready
+            and not (self.running or self.loading or self.resolving_encoder)
+            and any(
+                left.can_merge(right)
+                for left, right in zip(self.segments, self.segments[1:])
+            )
+        )
+        self.merge_segments_action.setEnabled(enabled)
+        self.merge_segments_button.setEnabled(enabled)
+
     def update_split_enabled(self):
         position = self.player.position()
         enabled = (
@@ -1127,6 +1171,7 @@ class Application(QObject):
         self.update_segment_summary()
 
     def update_segment_summary(self):
+        self.update_merge_enabled()
         if self.segments:
             total = sum(segment.end - segment.start for segment in self.segments)
             self.segment_summary.setText(
@@ -2000,6 +2045,7 @@ class Application(QObject):
         self.count_cancel.hide()
 
     def update_enabled(self):
+        self.update_merge_enabled()
         self.update_split_enabled()
         self.update_navigation()
         busy = self.running or self.loading or self.resolving_encoder

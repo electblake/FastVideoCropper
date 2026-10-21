@@ -16,6 +16,14 @@ class Segment:
     padding_x: int = 0
     padding_y: int = 0
 
+    def can_merge(self, other):
+        return (
+            self.end == other.start
+            and self.rect == other.rect
+            and self.padding_x == other.padding_x
+            and self.padding_y == other.padding_y
+        )
+
 
 class SceneScan:
     def __init__(self, source, duration, threshold, minimum, framestep=1, threads=0):

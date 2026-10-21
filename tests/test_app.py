@@ -32,6 +32,50 @@ def controller(qtbot, tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("trigger", ["button", "menu"])
+def test_merge_similar_segments(controller, qtbot, source, trigger):
+    c = controller
+    assert not c.merge_segments_action.isEnabled()
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.replace_segments([(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 8)])
+    c.segment_list.setCurrentRow(3)
+    c.set_rect((160, 0, 160, 240))
+    c.segment_list.setCurrentRow(6)
+    c.seek.setValue(6500)
+    position = c.player.position()
+    original = list(c.segments)
+    assert c.merge_segments_action.isEnabled()
+    assert c.merge_segments_button.isEnabled()
+    c.loading = True
+    c.update_enabled()
+    assert not c.merge_segments_action.isEnabled()
+    assert not c.merge_segments_button.isEnabled()
+    c.loading = False
+    c.update_enabled()
+    if trigger == "menu":
+        c.merge_segments_action.trigger()
+    else:
+        c.merge_segments_button.click()
+    assert [(s.start, s.end) for s in c.segments] == [(0, 3), (3, 4), (4, 8)]
+    assert all(s is original[i] for s, i in zip(c.segments, (0, 3, 4)))
+    assert c.source_segments[source] is c.segments
+    assert c.active_segment == c.segment_list.currentRow() == 2
+    assert c.player.position() == position
+    assert c.segment_list.count() == len(c.segment_regions) == 3
+    assert c.export_button.text() == "Export 3 segments"
+    assert not c.merge_segments_action.isEnabled()
+    assert not c.merge_segments_button.isEnabled()
+    c.merge_segments()
+    assert [(s.start, s.end) for s in c.segments] == [(0, 3), (3, 4), (4, 8)]
+    c.set_rect((160, 0, 160, 240))
+    assert c.merge_segments_action.isEnabled()
+    c.merge_segments_button.click()
+    assert [(s.start, s.end) for s in c.segments] == [(0, 3), (3, 8)]
+    assert c.active_segment == 1
+
+
+@pytest.mark.parametrize("trigger", ["button", "menu"])
 def test_add_full_timeline_segment(controller, qtbot, source, trigger):
     c = controller
     status = c.window.statusBar()

@@ -1,8 +1,30 @@
 import subprocess
+from dataclasses import replace
 
 import pytest
 
-from fastvideocropper.segments import SceneScan
+from fastvideocropper.segments import SceneScan, Segment
+
+
+@pytest.mark.parametrize(
+    "changes,expected",
+    [
+        ({}, True),
+        ({"preset": "16:9", "locked": True, "rotation": 3}, True),
+        ({"start": 1.001}, False),
+        ({"start": 0.999}, False),
+        ({"rect": (0.1, 0, 1, 1)}, False),
+        ({"rect": (0, 0.1, 1, 1)}, False),
+        ({"rect": (0, 0, 0.5, 1)}, False),
+        ({"rect": (0, 0, 1, 0.5)}, False),
+        ({"padding_x": -4}, False),
+        ({"padding_y": 4}, False),
+    ],
+)
+def test_merge_compatibility(changes, expected):
+    left = Segment(0, 1, (0, 0, 1, 1), 0, "Custom", False)
+    right = replace(left, start=1, end=2)
+    assert left.can_merge(replace(right, **changes)) is expected
 
 
 @pytest.mark.parametrize(
