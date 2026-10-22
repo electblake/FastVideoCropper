@@ -61,6 +61,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QSplitter,
     QStyle,
+    QStyleOptionSlider,
     QTabWidget,
     QToolButton,
     QVBoxLayout,
@@ -234,6 +235,7 @@ class Application(QObject):
         self.resize_timer.setInterval(500)
         self.resize_timer.timeout.connect(self.fit)
         self.window.installEventFilter(self)
+        self.seek.installEventFilter(self)
         self.viewport = self.graphics.viewport()
         self.viewport.installEventFilter(self)
         self.files_dock.widget().installEventFilter(self)
@@ -1363,10 +1365,7 @@ class Application(QObject):
         ):
             return
         position = self.range_view.mapSceneToView(event.scenePos()).x()
-        for index, segment in enumerate(self.segments):
-            if segment.start <= position < segment.end:
-                self.segment_list.setCurrentRow(index)
-                break
+        self.seek_segment(max(0, min(self.player.duration(), round(position * 1000))))
 
     def open_files(self):
         dialog = VideoFileDialog(
@@ -2348,6 +2347,36 @@ class Application(QObject):
             Path(filename).write_text(self.log.toPlainText(), encoding="utf-8")
 
     def eventFilter(self, watched, event):
+        if (
+            watched is self.seek
+            and event.type() == QEvent.Type.MouseButtonPress
+            and event.button() == Qt.MouseButton.LeftButton
+        ):
+            option = QStyleOptionSlider()
+            self.seek.initStyleOption(option)
+            handle = self.seek.style().subControlRect(
+                QStyle.ComplexControl.CC_Slider,
+                option,
+                QStyle.SubControl.SC_SliderHandle,
+                self.seek,
+            )
+            if not handle.contains(event.position().toPoint()):
+                groove = self.seek.style().subControlRect(
+                    QStyle.ComplexControl.CC_Slider,
+                    option,
+                    QStyle.SubControl.SC_SliderGroove,
+                    self.seek,
+                )
+                self.seek.setValue(
+                    QStyle.sliderValueFromPosition(
+                        self.seek.minimum(),
+                        self.seek.maximum(),
+                        round(event.position().x() - groove.x() - handle.width() / 2),
+                        groove.width() - handle.width(),
+                        option.upsideDown,
+                    )
+                )
+                return True
         if watched in (
             self.window,
             self.files_dock.widget(),
@@ -2396,6 +2425,7 @@ class Application(QObject):
                     self.gpu_probe.kill()
                     self.gpu_probe.waitForFinished()
                 self.window.removeEventFilter(self)
+                self.seek.removeEventFilter(self)
                 self.viewport.removeEventFilter(self)
                 self.files_dock.widget().removeEventFilter(self)
                 self.file_list.viewport().removeEventFilter(self)

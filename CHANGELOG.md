@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-10-21
+
+### Fixed
+
+- Restored click-to-seek on the playback scrubber while preserving handle dragging and stepper navigation.
+- Made clicks inside timeline segments seek to the clicked position and select the corresponding segment.
+
 ## [0.8.2] - 2026-10-21
 
 ### Added

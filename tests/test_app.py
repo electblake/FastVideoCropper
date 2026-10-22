@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import psutil
 import pytest
-from PySide6.QtCore import QMimeData, QPointF, QSettings, Qt, QTimer, QUrl
+from PySide6.QtCore import QMimeData, QPoint, QPointF, QSettings, Qt, QTimer, QUrl
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -2710,6 +2710,47 @@ def test_hidden_segments_stay_linked_to_timeline(controller, qtbot, source):
     c.clear_segments_button.click()
     assert c.segment_list.count() == len(c.segment_regions) == 0
     assert not c.export_button.isEnabled()
+
+
+@pytest.mark.parametrize("segmented", [False, True])
+def test_click_to_seek(controller, qtbot, source, segmented):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    if segmented:
+        c.replace_segments([(0, 2), (2, 8)])
+    for fraction in (0.75, 0.5, 0.125):
+        qtbot.mouseClick(
+            c.seek,
+            Qt.MouseButton.LeftButton,
+            pos=QPoint(round(c.seek.width() * fraction), c.seek.height() // 2),
+        )
+        assert c.player.position() == pytest.approx(8000 * fraction, abs=150)
+        if segmented:
+            assert c.active_segment == (1 if fraction >= 0.25 else 0)
+    for seconds in (6, 4, 1):
+        point = c.range_graph.mapFromScene(
+            c.range_view.mapViewToScene(QPointF(seconds, 0.5))
+        )
+        qtbot.mouseClick(c.range_graph.viewport(), Qt.MouseButton.LeftButton, pos=point)
+        assert c.player.position() == pytest.approx(seconds * 1000, abs=100)
+        if segmented:
+            assert c.active_segment == (1 if seconds >= 2 else 0)
+    option = app.QStyleOptionSlider()
+    c.seek.initStyleOption(option)
+    handle = c.seek.style().subControlRect(
+        app.QStyle.ComplexControl.CC_Slider,
+        option,
+        app.QStyle.SubControl.SC_SliderHandle,
+        c.seek,
+    )
+    qtbot.mousePress(c.seek, Qt.MouseButton.LeftButton, pos=handle.center())
+    assert c.seek.isSliderDown()
+    target = QPoint(c.seek.width() * 3 // 4, handle.center().y())
+    qtbot.mouseMove(c.seek, target)
+    qtbot.mouseRelease(c.seek, Qt.MouseButton.LeftButton, pos=target)
+    assert c.player.position() == pytest.approx(6000, abs=150)
 
 
 def test_files_selection_and_append(controller, qtbot, source, tmp_path, monkeypatch):
