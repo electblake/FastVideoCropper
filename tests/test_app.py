@@ -2348,6 +2348,14 @@ def test_navigation_fractional_millisecond_boundaries(controller, qtbot, source)
 
 def test_player_navigation_controls(controller, qtbot, source):
     c = controller
+    assert [b.text() for b in c.navigation_buttons.values()][2:8] == [
+        "−2 s",
+        "−1 s",
+        "−0.5 s",
+        "+0.5 s",
+        "+1 s",
+        "+2 s",
+    ]
     assert all(not b.isEnabled() for b in c.navigation_buttons.values())
     c.paths = [source]
     c.load(0)
@@ -2362,12 +2370,20 @@ def test_player_navigation_controls(controller, qtbot, source):
         ("next", 2000, 1),
         ("forward", 3000, 1),
         ("back", 2000, 1),
+        ("back_half", 1500, 0),
+        ("forward_half", 2000, 1),
+        ("forward_two", 4000, 1),
+        ("back_two", 2000, 1),
         ("next", 5000, 2),
         ("previous", 2000, 1),
         ("previous", 0, 0),
         ("back", 0, 0),
+        ("back_half", 0, 0),
+        ("back_two", 0, 0),
         ("end", 8000, 2),
         ("forward", 8000, 2),
+        ("forward_half", 8000, 2),
+        ("forward_two", 8000, 2),
         ("back", 7000, 2),
         ("start", 0, 0),
     ]:
@@ -2390,6 +2406,37 @@ def test_player_navigation_controls(controller, qtbot, source):
     c.clear_segments()
     assert not c.navigation_buttons["previous"].isEnabled()
     assert not c.navigation_buttons["next"].isEnabled()
+
+
+@pytest.mark.parametrize(
+    "name,step",
+    [
+        ("back_two", -2000),
+        ("back", -1000),
+        ("back_half", -500),
+        ("forward_half", 500),
+        ("forward", 1000),
+        ("forward_two", 2000),
+    ],
+)
+def test_step_buttons_repeat_while_held(controller, qtbot, source, name, step):
+    c = controller
+    c.paths = [source]
+    c.load(0)
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    c.seek_segment(4000)
+    button = c.navigation_buttons[name]
+    clicks = []
+    button.clicked.connect(lambda: clicks.append(c.player.position()))
+    qtbot.mousePress(button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: len(clicks) >= 2, timeout=2000)
+    qtbot.mouseRelease(button, Qt.MouseButton.LeftButton)
+    for index, position in enumerate(clicks, 1):
+        assert position == max(0, min(8000, 4000 + step * index))
+    count = len(clicks)
+    qtbot.wait(button.autoRepeatInterval() * 2 + 50)
+    assert len(clicks) == count
+    assert c.player.position() == clicks[-1]
 
 
 @pytest.mark.parametrize("trigger,rotation,sar", [("menu", 0, 1), ("button", 1, 2)])

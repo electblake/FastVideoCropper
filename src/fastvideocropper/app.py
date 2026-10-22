@@ -435,10 +435,30 @@ class Application(QObject):
                 lambda: self.jump_segment(-1),
             ),
             (
+                "back_two",
+                "−2 s",
+                None,
+                lambda: self.seek_segment(max(0, self.player.position() - 2000)),
+            ),
+            (
                 "back",
                 "−1 s",
                 None,
                 lambda: self.seek_segment(max(0, self.player.position() - 1000)),
+            ),
+            (
+                "back_half",
+                "−0.5 s",
+                None,
+                lambda: self.seek_segment(max(0, self.player.position() - 500)),
+            ),
+            (
+                "forward_half",
+                "+0.5 s",
+                None,
+                lambda: self.seek_segment(
+                    min(self.player.duration(), self.player.position() + 500)
+                ),
             ),
             (
                 "forward",
@@ -446,6 +466,14 @@ class Application(QObject):
                 None,
                 lambda: self.seek_segment(
                     min(self.player.duration(), self.player.position() + 1000)
+                ),
+            ),
+            (
+                "forward_two",
+                "+2 s",
+                None,
+                lambda: self.seek_segment(
+                    min(self.player.duration(), self.player.position() + 2000)
                 ),
             ),
             (
@@ -465,6 +493,7 @@ class Application(QObject):
             button.setText(text)
             button.setAccessibleName(text)
             button.setToolTip(text)
+            button.setAutoRepeat(icon is None)
             if icon is not None:
                 button.setIcon(self.window.style().standardIcon(icon))
             button.clicked.connect(slot)

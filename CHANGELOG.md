@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-10-21
+
+### Added
+
+- Added half-second and two-second playback steps, ordered −2, −1, −0.5, +0.5, +1, +2 seconds.
+- Enabled press-and-hold repeat on all six playback step buttons.
+
 ## [0.8.1] - 2026-10-21
 
 ### Changed
