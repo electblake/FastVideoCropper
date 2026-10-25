@@ -13,14 +13,19 @@ from fastvideocropper import app, installed
 
 
 @pytest.fixture
-def controller(qtbot, tmp_path, monkeypatch):
+def controller(qtbot, tmp_path, monkeypatch, request):
     monkeypatch.setattr(app, "user_config_path", lambda *args, **kwargs: tmp_path)
     palette = QApplication.palette()
     icon = QApplication.windowIcon()
     stylesheet = QApplication.instance().styleSheet()
-    controller = app.Application()
+    controller = app.Application(
+        no_profile=request.node.get_closest_marker("profile") is None
+    )
     qtbot.addWidget(controller.window)
-    controller.window.show()
+    if request.node.get_closest_marker("visible"):
+        controller.window.show()
+    else:
+        controller.window.showMinimized()
     yield controller
     controller.window.close()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
@@ -104,6 +109,7 @@ def test_restart_disabled_during_automatic_countdown(controller):
 
 
 @pytest.mark.parametrize("name", sorted(qt_themes.get_themes()))
+@pytest.mark.profile
 def test_saved_theme_applied_before_graphics(controller, qtbot, name):
     controller.settings.setValue("appearance/theme", name)
     controller.window.close()
@@ -165,6 +171,7 @@ def test_theme_keyboard_cancel(controller, qtbot):
 
 
 @pytest.mark.parametrize("scale", [1.0, 1.5])
+@pytest.mark.visible
 def test_appearance_controls_fit_settings_and_keyboard_order(controller, qtbot, scale):
     controller.tabs.setCurrentIndex(1)
     group = controller.theme.parentWidget()
@@ -190,6 +197,7 @@ def test_appearance_controls_fit_settings_and_keyboard_order(controller, qtbot, 
 
 
 @pytest.mark.parametrize("name", ["blue", "charcoal", "gray", "violet"])
+@pytest.mark.profile
 def test_icon_applies_live_and_restores(controller, qtbot, monkeypatch, name):
     question = Mock()
     monkeypatch.setattr(QMessageBox, "question", question)
@@ -236,7 +244,11 @@ def test_restart_after_event_loop_preserves_launcher_and_arguments(
     monkeypatch, launcher
 ):
     events = []
-    monkeypatch.setattr(sys, "argv", ["fastvideocropper", "video folder", "clip.mp4"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["fastvideocropper", "-NoProfile", "-Minimize", "video folder", "clip.mp4"],
+    )
     application = Mock()
     application.exec.side_effect = lambda: events.append("exit") or 0
     monkeypatch.setattr(launcher, "QApplication", lambda args: application)
@@ -246,7 +258,7 @@ def test_restart_after_event_loop_preserves_launcher_and_arguments(
     controller = SimpleNamespace(
         restart_requested=True,
         launcher_module=module,
-        window=SimpleNamespace(show=lambda: None, pending_installer=None),
+        window=SimpleNamespace(showMinimized=Mock(), pending_installer=None),
     )
     monkeypatch.setattr(launcher, "Application", lambda *a, **kw: controller)
     launch = Mock(side_effect=lambda *a, **kw: events.append("launch"))
@@ -257,6 +269,8 @@ def test_restart_after_event_loop_preserves_launcher_and_arguments(
         sys.executable,
         "-m",
         module,
+        "-NoProfile",
+        "-Minimize",
         "video folder",
         "clip.mp4",
     ]

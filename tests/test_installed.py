@@ -12,14 +12,16 @@ def test_installed_launcher_uses_private_tools_and_forwards_paths(
     prefix = root / "application/.venv"
     folder = str(tmp_path / "Video Folder")
     monkeypatch.setattr(sys, "prefix", str(prefix))
-    monkeypatch.setattr(sys, "argv", ["pythonw", folder, "clip.mp4"])
+    monkeypatch.setattr(
+        sys, "argv", ["pythonw", "-NoProfile", "-Minimize", folder, "clip.mp4"]
+    )
     qt = Mock()
     qt.exec.return_value = 0
     monkeypatch.setattr(installed, "QApplication", lambda args: qt)
     controller = Mock(
         return_value=SimpleNamespace(
             restart_requested=False,
-            window=SimpleNamespace(show=lambda: None, pending_installer=None),
+            window=SimpleNamespace(showMinimized=Mock(), pending_installer=None),
         )
     )
     monkeypatch.setattr(installed, "Application", controller)
@@ -30,6 +32,7 @@ def test_installed_launcher_uses_private_tools_and_forwards_paths(
         str(tools / "ffprobe.exe"),
         paths=[folder, "clip.mp4"],
         launcher_module="fastvideocropper.installed",
+        no_profile=True,
     )
 
 

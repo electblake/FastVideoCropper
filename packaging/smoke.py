@@ -10,7 +10,9 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QPushButton
 
 from fastvideocropper import app as application
+from fastvideocropper import installed
 
+report = Path(sys.argv[1])
 tools = Path(sys.prefix).parents[1] / "tools/ffmpeg/ffmpeg-8.1.2-essentials_build/bin"
 ffmpeg, ffprobe = str(tools / "ffmpeg.exe"), str(tools / "ffprobe.exe")
 workspace = tempfile.TemporaryDirectory(prefix="FastVideoCropper-smoke-")
@@ -38,17 +40,13 @@ subprocess.run(
     check=True,
     creationflags=subprocess.CREATE_NO_WINDOW,
 )
-application.user_config_path = lambda *args, **kwargs: Path(workspace.name)
-app = QApplication([])
-controller = application.Application(ffmpeg, ffprobe, paths=[source.parent, source])
-controller.window.show()
-assert controller.paths == [source]
 phase = "load"
-timer = QTimer()
 
 
 def step():
     global phase
+    assert controller.window.isMinimized()
+    assert isinstance(controller.settings, application.SessionSettings)
     if controller.ready and phase == "load":
         controller.replace_segments([(0.2, 0.7), (0.7, 1.2)])
         controller.segment_list.setCurrentRow(1)
@@ -118,7 +116,7 @@ def step():
         assert controller.player.source().isEmpty()
         controller.clear_files_button.click()
         assert not controller.paths and not controller.source_segments
-        Path(sys.argv[1]).write_text(
+        report.write_text(
             json.dumps(
                 {
                     "result": "passed",
@@ -140,7 +138,18 @@ def step():
         app.quit()
 
 
-timer.timeout.connect(step)
-timer.start(100)
-QTimer.singleShot(60000, lambda: app.exit(1))
-sys.exit(app.exec())
+def create_controller(*args, **kwargs):
+    global app, controller, timer
+    app = QApplication.instance()
+    controller = application.Application(*args, **kwargs)
+    assert controller.paths == [source]
+    timer = QTimer(controller)
+    timer.timeout.connect(step)
+    timer.start(100)
+    QTimer.singleShot(60000, lambda: app.exit(1))
+    return controller
+
+
+installed.Application = create_controller
+sys.argv = [sys.argv[0], "-NoProfile", "-Minimize", str(source.parent), str(source)]
+sys.exit(installed.main())

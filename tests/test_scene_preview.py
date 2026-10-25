@@ -5,9 +5,9 @@ def test_scene_preview_follows_scan_and_respects_toggle(
     qtbot, tmp_path, monkeypatch, source
 ):
     monkeypatch.setattr(app, "user_config_path", lambda *args, **kwargs: tmp_path)
-    c = app.Application()
+    c = app.Application(no_profile=True)
     qtbot.addWidget(c.window)
-    c.window.show()
+    c.window.showMinimized()
     c.paths = [source]
     c.load(0)
     qtbot.waitUntil(lambda: c.ready, timeout=15000)

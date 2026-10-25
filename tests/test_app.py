@@ -25,14 +25,19 @@ from fastvideocropper import app
 
 
 @pytest.fixture
-def controller(qtbot, tmp_path, monkeypatch):
+def controller(qtbot, tmp_path, monkeypatch, request):
     monkeypatch.setattr(app, "user_config_path", lambda *args, **kwargs: tmp_path)
     monkeypatch.setattr(
         app.VideoFileDialog, "exec", lambda self: QDialog.DialogCode.Accepted
     )
-    controller = app.Application()
+    controller = app.Application(
+        no_profile=request.node.get_closest_marker("profile") is None
+    )
     qtbot.addWidget(controller.window)
-    controller.window.show()
+    if request.node.get_closest_marker("visible"):
+        controller.window.show()
+    else:
+        controller.window.showMinimized()
     yield controller
     controller.window.close()
 
@@ -41,8 +46,8 @@ def test_window_deletion_destroys_playback_controller(
     qtbot, tmp_path, monkeypatch, source
 ):
     monkeypatch.setattr(app, "user_config_path", lambda *args, **kwargs: tmp_path)
-    c = app.Application(paths=[source])
-    c.window.show()
+    c = app.Application(paths=[source], no_profile=True)
+    c.window.showMinimized()
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
     player, probe, timer = c.player, c.probe, c.load_timer
     c.window.close()
@@ -169,6 +174,8 @@ def test_merge_similar_segments(controller, qtbot, source, trigger):
 
 
 @pytest.mark.parametrize("size", [(1200, 800), (900, 700)])
+@pytest.mark.profile
+@pytest.mark.visible
 def test_process_options_layout_keyboard_and_persistence(
     controller, qtbot, tmp_path, size
 ):
@@ -330,6 +337,7 @@ def test_add_full_timeline_segment(controller, qtbot, source, trigger):
 
 @pytest.mark.parametrize("remember", [False, True])
 @pytest.mark.parametrize("trigger", ["open", "next", "export_complete"])
+@pytest.mark.profile
 def test_automatically_create_first_segment(
     controller, qtbot, source, tmp_path, monkeypatch, remember, trigger
 ):
@@ -412,6 +420,7 @@ def test_automatically_create_first_segment(
 
 
 @pytest.mark.parametrize("remember", [False, True])
+@pytest.mark.profile
 def test_remember_crop_between_files_and_sessions(
     controller, qtbot, source, tmp_path, remember
 ):
@@ -1260,6 +1269,7 @@ def test_unload_keeps_files_and_releases_source(
 
 
 @pytest.mark.parametrize("reopen", ["selection", "open", "drop"])
+@pytest.mark.visible
 def test_preview_after_repeated_completed_runs(
     controller, qtbot, source, scene_video, tmp_path, monkeypatch, reopen
 ):
@@ -1323,6 +1333,7 @@ def test_preview_after_repeated_completed_runs(
         )
 
 
+@pytest.mark.visible
 def test_preview_switches_dimensions_and_rotation_after_unload(
     controller, qtbot, source, tmp_path, assert_file_released
 ):
@@ -2064,7 +2075,9 @@ def test_explorer_folder_startup(qtbot, tmp_path, monkeypatch):
 
 def test_explorer_startup_argument(monkeypatch, tmp_path):
     folder = str(tmp_path / "Selected folder with spaces")
-    monkeypatch.setattr(sys, "argv", ["fastvideocropper", folder, "clip.mp4"])
+    monkeypatch.setattr(
+        sys, "argv", ["fastvideocropper", "-NoProfile", "-Minimize", folder, "clip.mp4"]
+    )
     application = MagicMock()
     application.return_value.exec.return_value = 0
     controller = MagicMock()
@@ -2073,9 +2086,10 @@ def test_explorer_startup_argument(monkeypatch, tmp_path):
     monkeypatch.setattr(app, "QApplication", application)
     monkeypatch.setattr(app, "Application", controller)
     assert app.main() == 0
-    controller.assert_called_once_with(paths=[folder, "clip.mp4"])
+    controller.assert_called_once_with(paths=[folder, "clip.mp4"], no_profile=True)
 
 
+@pytest.mark.profile
 def test_preferences_restored_from_config_file(controller, qtbot, source, tmp_path):
     c = controller
     assert Path(c.settings.fileName()) == tmp_path / "settings.ini"
@@ -2622,6 +2636,8 @@ def test_scene_detection_replacement_confirmation(
 
 
 @pytest.mark.parametrize("placement", ["left", "floating", "hidden"])
+@pytest.mark.profile
+@pytest.mark.visible
 def test_segments_dock_layout_persistence_and_reset(controller, qtbot, placement):
     c = controller
     dock = c.segments_dock
@@ -2815,6 +2831,8 @@ def test_files_selection_and_append(controller, qtbot, source, tmp_path, monkeyp
 
 
 @pytest.mark.parametrize("placement", ["right", "floating", "hidden"])
+@pytest.mark.profile
+@pytest.mark.visible
 def test_files_dock_persistence_and_reset(controller, qtbot, placement):
     c = controller
     dock = c.files_dock

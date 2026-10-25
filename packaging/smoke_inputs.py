@@ -45,7 +45,6 @@ subprocess.run(
 )
 direct.write_bytes(video.read_bytes())
 (folder / "notes.txt").write_text("not a video")
-app.user_config_path = lambda *args, **kwargs: root
 
 
 def create_controller(*args, **kwargs):
@@ -57,6 +56,8 @@ def create_controller(*args, **kwargs):
         nonlocal selected_second
         if not controller.ready:
             return
+        assert controller.window.isMinimized()
+        assert isinstance(controller.settings, app.SessionSettings)
         assert controller.paths == [video, direct]
         assert controller.video.videoSink().videoFrame().isValid()
         assert controller.player.hasAudio()
@@ -92,5 +93,12 @@ def create_controller(*args, **kwargs):
 
 
 installed.Application = create_controller
-sys.argv = [sys.argv[0], str(folder), str(direct), str(video)]
+sys.argv = [
+    sys.argv[0],
+    "-NoProfile",
+    "-Minimize",
+    str(folder),
+    str(direct),
+    str(video),
+]
 sys.exit(installed.main())

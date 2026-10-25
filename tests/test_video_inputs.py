@@ -13,9 +13,9 @@ from fastvideocropper import app
 @pytest.fixture
 def controller(qtbot, tmp_path, monkeypatch):
     monkeypatch.setattr(app, "user_config_path", lambda *args, **kwargs: tmp_path)
-    c = app.Application()
+    c = app.Application(no_profile=True)
     qtbot.addWidget(c.window)
-    c.window.show()
+    c.window.showMinimized()
     yield c
     c.window.close()
 
@@ -33,9 +33,11 @@ def folder(tmp_path, source):
 
 def test_mixed_startup_loads_folder(qtbot, tmp_path, monkeypatch, source, folder):
     monkeypatch.setattr(app, "user_config_path", lambda *args, **kwargs: tmp_path)
-    c = app.Application(paths=[str(folder), str(source), str(folder / "clip.MP4")])
+    c = app.Application(
+        paths=[str(folder), str(source), str(folder / "clip.MP4")], no_profile=True
+    )
     qtbot.addWidget(c.window)
-    c.window.show()
+    c.window.showMinimized()
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
     assert c.paths == [folder / "clip.MP4", source]
     assert c.file_list.count() == 2

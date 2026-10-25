@@ -25,10 +25,14 @@ def main():
     controller = Application(
         str(tools / "ffmpeg.exe"),
         str(tools / "ffprobe.exe"),
-        paths=sys.argv[1:],
+        paths=[arg for arg in sys.argv[1:] if arg not in ("-NoProfile", "-Minimize")],
         launcher_module=MODULE,
+        no_profile="-NoProfile" in sys.argv[1:],
     )
-    controller.window.show()
+    if "-Minimize" in sys.argv[1:]:
+        controller.window.showMinimized()
+    else:
+        controller.window.show()
     result = app.exec()
     if controller.restart_requested:
         subprocess.Popen(

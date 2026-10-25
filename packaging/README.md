@@ -58,6 +58,8 @@ script and report. The smoke test generates media with the installed FFmpeg,
 decodes it with Qt Multimedia, crops/rotates/trims, exports HEVC with AAC audio,
 and probes the resulting dimensions and frame count. Restrict PATH to Windows
 System32 and remove PYTHONPATH/PYTHONHOME during this test.
+Both `smoke.py` and `smoke_inputs.py` launch with `-NoProfile -Minimize` and
+assert that the window stays minimized and preferences remain session-only.
 
 The installer is unsigned. Host installation tests do not replace testing on a
 clean Windows VM. Release notes state the actual validation performed.

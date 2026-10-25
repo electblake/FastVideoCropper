@@ -1,6 +1,6 @@
 [project]
 name = "fastvideocropper"
-version = "0.8.4"
+version = "0.8.5"
 description = "Native Qt video cropping and trimming"
 readme = "README.md"
 license = "MIT"
@@ -26,3 +26,7 @@ dev = ["pytest>=8", "pytest-qt>=4.4", "ruff>=0.9"]
 
 [tool.pytest.ini_options]
 qt_api = "pyside6"
+markers = [
+    "profile: exercises persistence using an isolated temporary profile",
+    "visible: requires a restored window for layout or keyboard interaction",
+]

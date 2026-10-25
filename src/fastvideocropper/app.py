@@ -98,6 +98,32 @@ class VideoFileDialog(QFileDialog):
         QDialog.accept(self)
 
 
+class SessionSettings:
+    """Preferences kept only in memory for a no-profile session."""
+
+    def __init__(self):
+        self.values = {}
+
+    def value(self, key, default=None, type=None):
+        value = self.values.get(key, default)
+        return type(value) if type is not None else value
+
+    def setValue(self, key, value):
+        self.values[key] = value
+
+    def contains(self, key):
+        return key in self.values
+
+    def allKeys(self):
+        return sorted(self.values)
+
+    def fileName(self):
+        return "Session only (-NoProfile; nothing is saved)"
+
+    def sync(self):
+        pass
+
+
 class Application(QObject):
     """Application controller; all visual components are stock or third-party."""
 
@@ -107,15 +133,19 @@ class Application(QObject):
         ffprobe="ffprobe",
         paths=(),
         launcher_module=integrations.APP_MODULE,
+        no_profile=False,
     ):
         super().__init__()
         self.ffmpeg = ffmpeg
         self.ffprobe = ffprobe
         self.launcher_module = launcher_module
-        self.settings = QSettings(
-            str(user_config_path(APP_NAME, appauthor=False) / "settings.ini"),
-            QSettings.Format.IniFormat,
-        )
+        if no_profile:
+            self.settings = SessionSettings()
+        else:
+            self.settings = QSettings(
+                str(user_config_path(APP_NAME, appauthor=False) / "settings.ini"),
+                QSettings.Format.IniFormat,
+            )
         self.restart_requested = False
         self.themes = qt_themes.get_themes()
         self.applied_theme = self.settings.value("appearance/theme", "")
@@ -2500,8 +2530,14 @@ def main():
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(APP_VERSION)
     app.setOrganizationName("FastVideoCropper")
-    controller = Application(paths=sys.argv[1:])
-    controller.window.show()
+    controller = Application(
+        paths=[arg for arg in sys.argv[1:] if arg not in ("-NoProfile", "-Minimize")],
+        no_profile="-NoProfile" in sys.argv[1:],
+    )
+    if "-Minimize" in sys.argv[1:]:
+        controller.window.showMinimized()
+    else:
+        controller.window.show()
     result = app.exec()
     if controller.restart_requested:
         subprocess.Popen(

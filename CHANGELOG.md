@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-10-25
+
+### Added
+
+- Added `-NoProfile` for sessions that neither read nor save preferences and `-Minimize` for minimized startup.
+- Added an initial-launch screenshot to the README.
+
+### Changed
+
+- Shortened the README to features and installer instructions; moved usage and development details into `docs/`.
+- Updated tests and installer smoke checks to use isolated preferences and minimized windows where possible.
+
 ## [0.8.4] - 2026-10-25
 
 ### Fixed
