@@ -1,8 +1,10 @@
+import subprocess
 from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QItemSelectionModel, QMimeData, QPointF, Qt, QUrl
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
+from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QTreeView
 
 from fastvideocropper import app
@@ -41,6 +43,51 @@ def test_mixed_startup_loads_folder(qtbot, tmp_path, monkeypatch, source, folder
     assert c.video.videoSink().videoFrame().isValid()
     assert not c.running and not c.count_timer.isActive()
     c.window.close()
+
+
+def test_low_frame_rate_hevc_with_audio_loads_and_seeks(controller, qtbot, tmp_path):
+    video = tmp_path / "low-fps-with-audio.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=320x240:rate=1:duration=16",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=16",
+            "-c:v",
+            "libx265",
+            "-x265-params",
+            "bframes=4:log-level=error",
+            "-c:a",
+            "aac",
+            str(video),
+        ],
+        check=True,
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+    c = controller
+    c.add_paths([video])
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    assert not c.loading
+    assert c.player.hasAudio()
+    assert c.player.audioOutput() is c.audio
+    assert c.player.playbackState() == QMediaPlayer.PlaybackState.PausedState
+    assert c.video.videoSink().videoFrame().isValid()
+    assert c.open_button.isEnabled()
+    assert "Probing metadata:" in c.log.toPlainText()
+    assert "Video ready: first preview frame decoded" in c.log.toPlainText()
+    with qtbot.waitSignal(c.video.videoSink().videoFrameChanged, timeout=15000):
+        c.seek_segment(8000)
+    assert c.player.position() == 8000
+    with qtbot.waitSignal(c.video.videoSink().videoFrameChanged, timeout=15000):
+        c.player.play()
+    c.player.pause()
 
 
 @pytest.mark.parametrize("target", ["panel", "list", "window"])

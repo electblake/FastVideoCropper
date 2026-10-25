@@ -1,6 +1,19 @@
+import _winapi
 import subprocess
 
 import pytest
+
+
+@pytest.fixture
+def assert_file_released():
+    def check(path):
+        # Exclusive access fails natively if any decoder still holds this file.
+        handle = _winapi.CreateFile(
+            str(path), _winapi.GENERIC_READ, 0, 0, _winapi.OPEN_EXISTING, 0, 0
+        )
+        _winapi.CloseHandle(handle)
+
+    return check
 
 
 @pytest.fixture(scope="session")

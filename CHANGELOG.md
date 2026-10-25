@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-10-25
+
+### Fixed
+
+- Fixed indefinite video loading for low-frame-rate HEVC files with audio by limiting Qt's preview decoder threading.
+- Added video-loading stages, playback states, and FFprobe diagnostics to Process log, and surfaced playback errors in the status bar.
+- Bound the playback controller and its player, processes, and timers to the main window's lifetime.
+- Replaced hanging process-wide file-handle scans in regression tests with exclusive access checks on the actual video files.
+- Finished deferred widget deletion before restoring application styles in appearance-test teardown.
+
 ## [0.8.3] - 2026-10-21
 
 ### Fixed

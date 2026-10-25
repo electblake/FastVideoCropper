@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 import qt_themes
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QCoreApplication, QEvent, Qt, QTimer
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
 
@@ -23,6 +23,7 @@ def controller(qtbot, tmp_path, monkeypatch):
     controller.window.show()
     yield controller
     controller.window.close()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     QApplication.instance().setStyleSheet(stylesheet)
     QApplication.setPalette(palette)
     QApplication.setWindowIcon(icon)

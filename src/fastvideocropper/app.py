@@ -1,5 +1,6 @@
 """Native widgets composed around Qt Multimedia and PyQtGraph's ROI."""
 
+import ctypes
 import json
 import os
 import subprocess
@@ -10,6 +11,7 @@ from string import Template
 
 import psutil
 import pyqtgraph as pg
+import PySide6
 import qt_themes
 from platformdirs import user_config_path
 from PySide6.QtCore import (
@@ -181,6 +183,7 @@ class Application(QObject):
         self.export_jobs = []
         self.export_index = 0
         self.window = QMainWindow()
+        self.setParent(self.window)
         QApplication.setWindowIcon(self.icons[self.applied_icon])
         self.window.pending_installer = None
         self.update_dialog = UpdateDialog(self.window)
@@ -189,6 +192,13 @@ class Application(QObject):
         self.window.setWindowTitle(f"{APP_NAME} {APP_VERSION}")
         self.window.resize(1200, 800)
         self.window.setAcceptDrops(True)
+        # Auto frame threading can exhaust Qt's audio buffer before a low-FPS
+        # video yields its first frame. Keep preview decoding single-threaded.
+        [avutil_path] = Path(PySide6.__file__).parent.glob("avutil-*.dll")
+        self.avutil = ctypes.CDLL(str(avutil_path))
+        self.avutil.av_cpu_force_count.argtypes = [ctypes.c_int]
+        self.avutil.av_cpu_force_count.restype = None
+        self.avutil.av_cpu_force_count(1)
         self.player = QMediaPlayer(self)
         self.audio = QAudioOutput(self)
         self.player.setAudioOutput(self.audio)
@@ -199,6 +209,14 @@ class Application(QObject):
         self.process = QProcess(self)
         self.probe = QProcess(self)
         self.probe.finished.connect(self.media_probed)
+        self.probe.readyReadStandardError.connect(
+            lambda: self.log.appendPlainText(
+                bytes(self.probe.readAllStandardError()).decode("utf-8")
+            )
+        )
+        self.probe.errorOccurred.connect(
+            lambda _: self.log.appendPlainText(self.probe.errorString())
+        )
         self.gpu_probe = QProcess(self)
         self.gpu_probe.finished.connect(self.encoder_probed)
         self.process.readyReadStandardOutput.connect(self.read_progress)
@@ -209,6 +227,12 @@ class Application(QObject):
         )
         self.player.errorOccurred.connect(
             lambda _, text: self.log.appendPlainText(text)
+        )
+        self.player.errorOccurred.connect(
+            lambda _, text: self.window.statusBar().showMessage(text)
+        )
+        self.player.mediaStatusChanged.connect(
+            lambda status: self.log.appendPlainText(f"Playback: {status.name}")
         )
         self.build_ui()
         if self.settings.contains("mainWindow/geometry"):
@@ -1483,6 +1507,8 @@ class Application(QObject):
         self.output = None
         self.progress.setValue(0)
         self.window.statusBar().showMessage("Loading video…")
+        self.log.appendPlainText(f"Loading video: {self.paths[index]}")
+        self.log.appendPlainText(f"Probing metadata: {self.ffprobe}")
         self.update_enabled()
         self.probe.start(
             self.ffprobe,
@@ -1508,6 +1534,11 @@ class Application(QObject):
                 if "rotation" in data:
                     self.source_rotation = data["rotation"] // 90
         self.refresh_segments()
+        self.log.appendPlainText(
+            f"Metadata ready: {self.source_width} × {self.source_height}; "
+            "decoding first video frame"
+        )
+        self.window.statusBar().showMessage("Decoding first video frame…")
         self.player.setSource(QUrl.fromLocalFile(str(self.paths[self.index])))
         self.output = None
         self.update_enabled()
@@ -1547,6 +1578,7 @@ class Application(QObject):
         self.loading = False
         self.view.setOpacity(1)
         self.window.statusBar().showMessage("Ready")
+        self.log.appendPlainText("Video ready: first preview frame decoded")
         self.geometry_changed()
         self.set_aspect_lock()
         self.fit()

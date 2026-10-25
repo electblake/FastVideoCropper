@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import psutil
 import pytest
+import shiboken6
 from PySide6.QtCore import QMimeData, QPoint, QPointF, QSettings, Qt, QTimer, QUrl
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
@@ -34,6 +35,22 @@ def controller(qtbot, tmp_path, monkeypatch):
     controller.window.show()
     yield controller
     controller.window.close()
+
+
+def test_window_deletion_destroys_playback_controller(
+    qtbot, tmp_path, monkeypatch, source
+):
+    monkeypatch.setattr(app, "user_config_path", lambda *args, **kwargs: tmp_path)
+    c = app.Application(paths=[source])
+    c.window.show()
+    qtbot.waitUntil(lambda: c.ready, timeout=15000)
+    player, probe, timer = c.player, c.probe, c.load_timer
+    c.window.close()
+    with qtbot.waitSignal(c.destroyed):
+        c.window.deleteLater()
+    assert not shiboken6.isValid(player)
+    assert not shiboken6.isValid(probe)
+    assert not shiboken6.isValid(timer)
 
 
 @pytest.mark.parametrize("placement", ["docked", "floating", "hidden"])
@@ -1134,7 +1151,7 @@ def test_numeric_lock_and_preset(controller, qtbot, source):
 @pytest.mark.parametrize("advance", [False, True])
 @pytest.mark.parametrize("quit_done", [False, True])
 def test_final_export_unloads_video(
-    controller, qtbot, source, tmp_path, advance, quit_done
+    controller, qtbot, source, tmp_path, advance, quit_done, assert_file_released
 ):
     import shutil
 
@@ -1167,9 +1184,7 @@ def test_final_export_unloads_video(
         c.count_cancelled()
     if advance:
         assert not c.video.videoSink().videoFrame().isValid()
-        assert source.resolve() not in {
-            Path(file.path).resolve() for file in psutil.Process().open_files()
-        }
+        assert_file_released(source)
         assert c.paths == [source]
         assert c.index == c.file_list.currentRow() == -1
         assert not c.file_list.selectedItems()
@@ -1190,7 +1205,7 @@ def test_final_export_unloads_video(
 
 @pytest.mark.parametrize("deselect", ["button", "selection"])
 def test_unload_keeps_files_and_releases_source(
-    controller, qtbot, source, tmp_path, deselect
+    controller, qtbot, source, tmp_path, deselect, assert_file_released
 ):
     c = controller
     other = tmp_path / "other.mp4"
@@ -1221,17 +1236,13 @@ def test_unload_keeps_files_and_releases_source(
     assert not c.export_button.isEnabled()
     assert not c.select_none_button.isEnabled()
     assert c.clear_files_button.isEnabled()
-    assert source.resolve() not in {
-        Path(file.path).resolve() for file in psutil.Process().open_files()
-    }
+    assert_file_released(source)
     c.file_list.setCurrentRow(0)
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
     assert c.rect() == (20, 30, 160, 120)
     c.file_list.setCurrentRow(1)
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
-    assert source.resolve() not in {
-        Path(file.path).resolve() for file in psutil.Process().open_files()
-    }
+    assert_file_released(source)
     c.done.add(source)
     c.clear_files_button.click()
     assert not c.paths and not c.source_segments and not c.done
@@ -1239,9 +1250,7 @@ def test_unload_keeps_files_and_releases_source(
     assert c.file_list.count() == 0
     assert not c.ready and c.player.source().isEmpty()
     assert not c.clear_files_button.isEnabled()
-    assert other.resolve() not in {
-        Path(file.path).resolve() for file in psutil.Process().open_files()
-    }
+    assert_file_released(other)
     c.paths = [source]
     c.load(0)
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
@@ -1315,7 +1324,7 @@ def test_preview_after_repeated_completed_runs(
 
 
 def test_preview_switches_dimensions_and_rotation_after_unload(
-    controller, qtbot, source, tmp_path
+    controller, qtbot, source, tmp_path, assert_file_released
 ):
     other = tmp_path / "wide.mp4"
     subprocess.run(
@@ -1376,9 +1385,7 @@ def test_preview_switches_dimensions_and_rotation_after_unload(
         )
         assert c.rotation == 1
         assert c.rect() == (20, 30, 120, 160)
-        assert other.resolve() not in {
-            Path(file.path).resolve() for file in psutil.Process().open_files()
-        }
+        assert_file_released(other)
 
 
 @pytest.mark.parametrize(
@@ -1406,7 +1413,9 @@ def test_failed_final_export_stays_loaded(
 
 
 @pytest.mark.parametrize("playing", [False, True])
-def test_close_releases_video(controller, qtbot, source, tmp_path, playing):
+def test_close_releases_video(
+    controller, qtbot, source, tmp_path, playing, assert_file_released
+):
     import shutil
 
     video = tmp_path / "close-test.mp4"
@@ -1420,9 +1429,7 @@ def test_close_releases_video(controller, qtbot, source, tmp_path, playing):
     controller.window.close()
     assert controller.player.source().isEmpty()
     assert not controller.video.videoSink().videoFrame().isValid()
-    assert video.resolve() not in {
-        Path(file.path).resolve() for file in psutil.Process().open_files()
-    }
+    assert_file_released(video)
     video.rename(tmp_path / "released.mp4")
 
 
@@ -1582,7 +1589,9 @@ def test_container_fallback_does_not_retry_other_failures(
 
 
 @pytest.mark.parametrize("playing", [False, True])
-def test_switch_releases_previous_video(controller, qtbot, source, tmp_path, playing):
+def test_switch_releases_previous_video(
+    controller, qtbot, source, tmp_path, playing, assert_file_released
+):
     import shutil
 
     video = tmp_path / "switch-test.mp4"
@@ -1598,9 +1607,7 @@ def test_switch_releases_previous_video(controller, qtbot, source, tmp_path, pla
         qtbot.waitUntil(lambda: c.player.position() > 0, timeout=15000)
     c.load(1)
     assert not c.video.videoSink().videoFrame().isValid()
-    assert video.resolve() not in {
-        Path(file.path).resolve() for file in psutil.Process().open_files()
-    }
+    assert_file_released(video)
     renamed = video.rename(tmp_path / "released.mp4")
     qtbot.waitUntil(lambda: c.ready, timeout=15000)
     assert c.player.source().toLocalFile() == str(source).replace("\\", "/")

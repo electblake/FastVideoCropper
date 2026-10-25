@@ -27,9 +27,17 @@ subprocess.run(
         "-f",
         "lavfi",
         "-i",
-        "color=white:s=160x90:r=10:d=2",
+        "testsrc2=size=320x240:rate=1:duration=16",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:duration=16",
         "-c:v",
-        "libx264",
+        "libx265",
+        "-x265-params",
+        "bframes=4:log-level=error",
+        "-c:a",
+        "aac",
         str(video),
     ],
     check=True,
@@ -51,6 +59,8 @@ def create_controller(*args, **kwargs):
             return
         assert controller.paths == [video, direct]
         assert controller.video.videoSink().videoFrame().isValid()
+        assert controller.player.hasAudio()
+        assert controller.player.audioOutput() is controller.audio
         assert controller.view.opacity() == 1
         assert controller.view.sceneBoundingRect().width() > 100
         assert not controller.running and not controller.count_timer.isActive()
@@ -66,7 +76,7 @@ def create_controller(*args, **kwargs):
                         "result": "passed",
                         "launcher": installed.MODULE,
                         "inputs": "Folder with spaces, direct video, duplicate folder video",
-                        "preview": "Both imported videos decoded and displayed",
+                        "preview": "Both 1 FPS HEVC videos decoded and displayed with audio enabled",
                     },
                     indent=2,
                 )
