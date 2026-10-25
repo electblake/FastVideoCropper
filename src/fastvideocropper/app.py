@@ -262,7 +262,8 @@ class Application(QObject):
             lambda _, text: self.window.statusBar().showMessage(text)
         )
         self.player.mediaStatusChanged.connect(
-            lambda status: self.log.appendPlainText(f"Playback: {status.name}")
+            lambda status: self.log.appendPlainText(f"Playback: {status.name}"),
+            Qt.ConnectionType.QueuedConnection,
         )
         self.build_ui()
         if self.settings.contains("mainWindow/geometry"):

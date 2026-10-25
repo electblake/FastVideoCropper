@@ -28,6 +28,8 @@ def controller(qtbot, tmp_path, monkeypatch, request):
         controller.window.showMinimized()
     yield controller
     controller.window.close()
+    with qtbot.waitSignal(controller.destroyed):
+        controller.window.deleteLater()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     QApplication.instance().setStyleSheet(stylesheet)
     QApplication.setPalette(palette)

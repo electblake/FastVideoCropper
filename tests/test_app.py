@@ -40,6 +40,17 @@ def controller(qtbot, tmp_path, monkeypatch, request):
         controller.window.showMinimized()
     yield controller
     controller.window.close()
+    with qtbot.waitSignal(controller.destroyed):
+        controller.window.deleteLater()
+
+
+def test_playback_status_logging_is_queued(controller, qtbot, monkeypatch):
+    append = MagicMock()
+    monkeypatch.setattr(controller.log, "appendPlainText", append)
+    controller.player.mediaStatusChanged.emit(controller.player.MediaStatus.NoMedia)
+    append.assert_not_called()
+    qtbot.waitUntil(lambda: append.called)
+    append.assert_called_once_with("Playback: NoMedia")
 
 
 def test_window_deletion_destroys_playback_controller(
@@ -59,6 +70,7 @@ def test_window_deletion_destroys_playback_controller(
 
 
 @pytest.mark.parametrize("placement", ["docked", "floating", "hidden"])
+@pytest.mark.visible
 def test_segment_and_export_button_grid(controller, qtbot, source, placement):
     c = controller
     parent = c.export_button.parentWidget()

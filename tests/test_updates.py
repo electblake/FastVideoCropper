@@ -13,11 +13,13 @@ from fastvideocropper import app, installed, updates
 @pytest.fixture
 def controller(qtbot, tmp_path, monkeypatch):
     monkeypatch.setattr(app, "user_config_path", lambda *args, **kwargs: tmp_path)
-    c = app.Application()
+    c = app.Application(no_profile=True)
     qtbot.addWidget(c.window)
-    c.window.show()
+    c.window.showMinimized()
     yield c
     c.window.close()
+    with qtbot.waitSignal(c.destroyed):
+        c.window.deleteLater()
 
 
 @pytest.mark.parametrize(
@@ -169,7 +171,9 @@ def test_manual_update_flow(controller, qtbot, monkeypatch, tmp_path):
 def test_launch_after_event_loop(monkeypatch, tmp_path, install, packaged):
     events = []
     path = tmp_path / "Setup.exe"
-    window = SimpleNamespace(pending_installer=None, show=lambda: events.append("show"))
+    window = SimpleNamespace(
+        pending_installer=None, showMinimized=lambda: events.append("minimize")
+    )
 
     class FakeApp:
         def __init__(self, args):
@@ -200,7 +204,9 @@ def test_launch_after_event_loop(monkeypatch, tmp_path, install, packaged):
     )
     monkeypatch.setattr(app, "QApplication", FakeApp)
     monkeypatch.setattr(app.os, "startfile", launch)
-    monkeypatch.setattr(app.sys, "argv", ["fastvideocropper"])
+    monkeypatch.setattr(
+        app.sys, "argv", ["fastvideocropper", "-NoProfile", "-Minimize"]
+    )
     if packaged:
         monkeypatch.setattr(installed, "QApplication", FakeApp)
         monkeypatch.setattr(
@@ -211,4 +217,4 @@ def test_launch_after_event_loop(monkeypatch, tmp_path, install, packaged):
         assert installed.main() == 7
     else:
         assert app.main() == 7
-    assert events == ["show", "exec"] + (["launch"] if install else [])
+    assert events == ["minimize", "exec"] + (["launch"] if install else [])

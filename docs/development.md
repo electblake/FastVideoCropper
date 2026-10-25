@@ -8,7 +8,7 @@
 - Launch without reading or saving preferences: `uv run fastvideocropper -NoProfile`. Add `-Minimize` to start minimized.
 - Pass files or folders as arguments: `uv run fastvideocropper "C:\Videos" "C:\Clips\clip.mp4"`.
 - Run tests: `uv run pytest`.
-- Launch/restart checks use `-NoProfile -Minimize`; controller-based integration checks use `no_profile=True` and `showMinimized()`. Persistence tests use isolated temporary profiles, and layout/appearance tests restore windows when needed to verify rendering or keyboard focus.
+- Pytest uses Qt's offscreen platform and Windows Vista widget style so widget tests do not interrupt the desktop and retain Windows sizing. Launch/restart checks use `-NoProfile -Minimize`; controller-based integration checks use `no_profile=True` and `showMinimized()`. Persistence tests use isolated temporary profiles, and rendering/keyboard tests restore their offscreen windows. Packaging smoke tests exercise native minimized Windows startup with both flags.
 - Run lint checks: `uv run ruff check .`.
 
 ## Implementation

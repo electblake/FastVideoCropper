@@ -1,7 +1,29 @@
 import _winapi
+import gc
+import os
 import subprocess
+from pathlib import Path
 
 import pytest
+
+# Exercise widget rendering without creating desktop windows during regression runs.
+os.environ["QT_QPA_PLATFORM"] = "offscreen:configfile=" + os.path.relpath(
+    Path(__file__).with_name("qt-offscreen.json")
+)
+os.environ["QT_STYLE_OVERRIDE"] = "windowsvista"
+
+
+@pytest.fixture(autouse=True)
+def collect_after_qt_teardown(qapp):
+    from PySide6.QtCore import QCoreApplication, QEvent
+
+    # Delete Qt-owned widgets before collecting Python reference cycles.
+    # Collection inside a decoder callback can deadlock native destruction.
+    gc.disable()
+    yield
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    gc.collect()
+    gc.enable()
 
 
 @pytest.fixture

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.6] - 2026-10-25
+
+### Changed
+
+- Ran regression tests offscreen with a fixed virtual display and Windows widget sizing to avoid interrupting the desktop.
+- Updated updater launch tests to use `-NoProfile -Minimize` and isolated session settings.
+
+### Fixed
+
+- Queued playback-status log updates to avoid synchronous UI updates during media shutdown.
+- Completed Qt widget destruction before collecting Python reference cycles in regression tests.
+- Preserved rendering, keyboard-focus, and window-layout persistence coverage in offscreen tests.
+
 ## [0.8.5] - 2026-10-25
 
 ### Added

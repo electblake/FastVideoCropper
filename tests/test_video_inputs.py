@@ -18,6 +18,8 @@ def controller(qtbot, tmp_path, monkeypatch):
     c.window.showMinimized()
     yield c
     c.window.close()
+    with qtbot.waitSignal(c.destroyed):
+        c.window.deleteLater()
 
 
 @pytest.fixture
